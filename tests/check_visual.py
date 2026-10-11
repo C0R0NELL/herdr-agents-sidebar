@@ -17,10 +17,10 @@ def sidebar_lines(lines, width):
     return [(i, line[:width-1]) for i, line in enumerate(lines) if i >= start and i < len(lines)-1]
 
 
-def capture_svg(screen, rows, path, width):
+def capture_svg(screen, rows, path, width, *, title="Native Herdr 0.9.3 sidebar captured from two isolated servers"):
     """Export actual captured terminal cells, not a separately rendered mock."""
     output = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width*10+16}" height="{len(rows)*22+16}" viewBox="0 0 {width*10+16} {len(rows)*22+16}">',
-              '<title>Native Herdr 0.9.3 sidebar captured from two isolated servers</title>',
+              f'<title>{escape(title)}</title>',
               '<rect width="100%" height="100%" fill="#181825"/>',
               '<g font-family="DejaVu Sans Mono, monospace" font-size="16">']
     for index, (y, _) in enumerate(rows):
@@ -36,7 +36,7 @@ def capture_svg(screen, rows, path, width):
     path.write_text('\n'.join(output))
 
 
-def check(width, evidence=None):
+def check(width, evidence=None, *, show_separator=False):
     with HerdrHarness() as h:
         h.start("local", width)
         h.start("remote", width)
@@ -44,7 +44,7 @@ def check(width, evidence=None):
         assert local[0][0] == remote[0][0], "Fixture must repeat native IDs across machines"
         machines = [Machine(name, SESSION, label, h.api(name,"session.snapshot")["snapshot"])
                     for name,label in (("local","machine01"),("remote","machine02"))]
-        desired = layout(machines, gap_between_machines=True)
+        desired = layout(machines, gap_between_machines=show_separator)
         for machine in machines:
             h.publish(machine.id, [(key.pane_id,tokens) for key,tokens in desired.items() if key.machine==machine.id])
         h.connect_remote()
@@ -64,7 +64,7 @@ def check(width, evidence=None):
             rows = sidebar_lines(lines, width)
             visible = [(y, text) for y, text in rows if text.strip()]
             expected = ["machine01", "projeto01", "agente01", "agente02",
-                        "projeto02", "agente03", "·", "machine02",
+                        "projeto02", "agente03"] + (["·"] if show_separator else []) + ["machine02",
                         "projeto01", "agente01", "agente02",
                         "projeto02", "agente03"]
             assert len(visible) == len(expected), visible
@@ -115,8 +115,10 @@ def check(width, evidence=None):
             assert term.screen.buffer[agent_y][icon_x].fg == "a6e3a1"
 
             # Machine/project headers focus their own real anchor, across machines.
+            remote_start = 6 + int(show_separator)
             for row_index, machine, pane in ((0,"local",local[0][0]), (4,"local",local[-1][0]),
-                                            (7,"remote",remote[0][0]), (11,"remote",remote[-1][0])):
+                                            (remote_start,"remote",remote[0][0]),
+                                            (remote_start+4,"remote",remote[-1][0])):
                 term.click(4, visible[row_index][0])
                 deadline = time.monotonic() + 5
                 while time.monotonic() < deadline:
@@ -132,6 +134,7 @@ def check(width, evidence=None):
                 evidence.parent.mkdir(parents=True, exist_ok=True)
                 evidence.write_text(json.dumps({
                     "herdr": "0.9.3", "protocol": 22, "width": width,
+                    "show_separator": show_separator,
                     "transport": "local SSH shim, real Herdr servers and bridges",
                     "rows": [text.replace("\u2800", " ").rstrip() for _,text in visible],
                 }, ensure_ascii=False, indent=2)+"\n")
@@ -143,13 +146,18 @@ def check(width, evidence=None):
                 try:
                     one = solo.wait(lambda lines: sum(line[10:16] == "agente" for line in lines) == 3)
                     body = [text.replace("\u2800", " ").strip() for _,text in sidebar_lines(one,width) if text.strip()]
-                    assert body[-1] == "·", "Expected shared-token limitation was not reproduced"
+                    if show_separator:
+                        assert body[-1] == "·", "Expected shared-token limitation was not reproduced"
+                        result = "shared gap token trails the final local agent"
+                        print("REPRODUCED: a shared gap token becomes trailing in a local-only client")
+                    else:
+                        assert "·" not in body, "Disabled separator appeared in a local-only client"
+                        result = "disabled machine gaps remain absent in a local-only client"
                     assert "machine02" not in body, "Second client unexpectedly has a remote catalog"
-                    print("REPRODUCED: a shared gap token becomes trailing in a local-only client")
                     if evidence:
                         report = json.loads(evidence.read_text())
                         report["different_client_catalog"] = {
-                            "rows": body, "result": "shared gap token trails the final local agent",
+                            "rows": body, "result": result,
                         }
                         evidence.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
                 finally:
@@ -166,15 +174,16 @@ def check(width, evidence=None):
             assert all(term.screen.buffer[y][width-1].data == "│" for y in range(1,59)), "Wide text spilled into the pane"
         finally:
             term.close()
-    print(f"PASS: native layout/colors/focus at {width} columns, two isolated servers")
+    print(f"PASS: native layout/colors/focus at {width} columns, separator {'On' if show_separator else 'Off'}, two isolated servers")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", type=Path)
+    parser.add_argument("--show-separator", action="store_true", help="enable optional machine gaps (default: Off)")
     args = parser.parse_args()
     for width in (18, 22, 36):
-        check(width, args.evidence)
+        check(width, args.evidence, show_separator=args.show_separator)
 
 
 if __name__ == "__main__":

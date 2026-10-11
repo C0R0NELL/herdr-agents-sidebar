@@ -31,6 +31,74 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(result[AgentKey("local", "one", "w1", "w1:p2")]["has_gap"], "·")
         self.assertIsNone(result[AgentKey("remote", "two", "w1", "w1:p2")]["has_gap"])
 
+    def test_priority_rows_keep_every_agents_context_without_tree_anchors(self):
+        local = Machine("local", "one", "machine01", snapshot())
+        remote = Machine("remote", "two", "machine02", snapshot())
+        desired = layout([local, remote], gap_between_machines=True, mode="priority")
+        self.assertEqual(len(desired), 4)
+        for tokens in desired.values():
+            self.assertIsNone(tokens["has_machine"])
+            self.assertEqual(tokens["has_project"], "project")
+            self.assertIsNone(tokens["has_gap"])
+            self.assertIsNone(tokens["has_agent_prefix"])
+        # Native reordering does not change an agent's project in Priority.
+        local.snapshot["agents"].reverse()
+        self.assertEqual(layout([local, remote], gap_between_machines=False, mode="priority"), desired)
+
+    def test_priority_can_render_interleaved_workspaces_with_explicit_context(self):
+        data = snapshot()
+        data["agents"].insert(1, {"pane_id": "w2:p1", "workspace_id": "w2", "name": "third"})
+        data["workspaces"].append({"workspace_id": "w2", "label": "other"})
+        desired = layout([Machine("local", "one", "machine", data)],
+                         gap_between_machines=False, mode="priority")
+        self.assertEqual(desired[AgentKey("local", "one", "w2", "w2:p1")]["has_project"], "other")
+        self.assertEqual(len(desired), 3)
+
+    def test_hiding_groups_clears_owned_tokens_without_losing_native_identities(self):
+        machines = [Machine("local", "one", "machine01", snapshot()),
+                    Machine("remote", "two", "machine02", snapshot())]
+        original = layout(machines, gap_between_machines=True)
+        for machine in machines:
+            for field in ("panes", "agents"):
+                for item in machine.snapshot[field]:
+                    item["tokens"] = {**original[AgentKey(machine.id, machine.session, "w1", item["pane_id"])],
+                                      "foreign": "preserve"}
+        for fields in (("status", "agent"), ("status", "tab"), ("agent", "project"),
+                       ("machine", "project", "status", "agent", "tab")):
+            with self.subTest(fields=fields):
+                desired = layout(machines, gap_between_machines=True, mode="priority", fields=fields)
+                self.assertEqual(desired.keys(), original.keys())
+                if "agent" in fields:
+                    self.assertEqual([t["has_agent"] for t in desired.values()], ["first", "second"] * 2)
+                else:
+                    self.assertTrue(all(t["has_agent"] is None for t in desired.values()))
+                if "machine" not in fields:
+                    self.assertTrue(all(t["has_machine"] is None and t["has_gap"] is None for t in desired.values()))
+                if "project" not in fields:
+                    self.assertTrue(all(t["has_project"] is None and t["has_agent_prefix"] is None for t in desired.values()))
+                clears, updates = patches(machines, desired)
+                self.assertTrue(all("foreign" not in p.tokens and "state_icon" not in p.tokens for p in clears + updates))
+                if fields == ("status", "agent"):
+                    first = next(p.tokens for p in clears if p.key == AgentKey("local", "one", "w1", "w1:p1"))
+                    self.assertEqual(first, {"has_machine": None, "has_project": None, "has_agent_prefix": None})
+
+    def test_grouped_views_always_preserve_machine_and_project_tree(self):
+        machines = [Machine("local", "one", "machine01", snapshot())]
+        base = layout(machines, gap_between_machines=False)
+        for fields in (("agent",), ("agent", "tab")):
+            self.assertEqual(layout(machines, gap_between_machines=False, fields=fields), base)
+
+    def test_priority_to_grouped_clears_extra_headings_before_assigning_tree_anchors(self):
+        machine = Machine("local", "one", "machine", snapshot())
+        previous = layout([machine], gap_between_machines=False, mode="priority")
+        for field in ("panes", "agents"):
+            for item in machine.snapshot[field]:
+                item["tokens"] = previous[AgentKey("local", "one", "w1", item["pane_id"])].copy()
+        removals, updates = patches([machine], layout([machine], gap_between_machines=False))
+        cleared = next(change.tokens for change in removals if change.key.pane_id == "w1:p2")
+        self.assertEqual(cleared, {"has_project": None})
+        self.assertTrue(all("state_icon" not in change.tokens for change in removals + updates))
+
     def test_old_anchor_is_cleared_before_new_anchor_is_set(self):
         old = {"w1:p1": {"has_machine": "machine01", "has_project": ">> project", "foreign": "preserve"}}
         data = snapshot(tokens=old)

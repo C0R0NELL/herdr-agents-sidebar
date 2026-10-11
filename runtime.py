@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 
-from configuration import Conflict, PLUGIN_ID, SOURCE, Presentation, Store, atomic_write, lock
+from configuration import Conflict, PLUGIN_ID, SOURCE, Presentation, Settings, Store, atomic_write, lock
 from layout import MAX_MACHINES, Machine, layout, patches
 
 TTL_MS = 60000
@@ -213,7 +213,8 @@ class Reconciler:
         self.cache = {key: value for key, value in self.cache.items() if key in known}
         local = self.herdr.snapshot()
         machines = [local] + [self.cache[p["id"]] for p in self.profiles if p["id"] in self.cache]
-        desired = {} if clear else layout(machines, gap_between_machines=settings.show_separator)
+        desired = {} if clear else layout(machines, gap_between_machines=settings.show_separator,
+                                         mode=settings.mode, fields=settings.visible_fields)
         renew = now >= self.next_renew
         removals, updates = patches(machines, desired, renew=renew)
         # Each endpoint clears old anchors before setting new ones. Remote work
@@ -235,7 +236,8 @@ class Reconciler:
         combined = [current if m.id == current.id else m for m in machines]
         if not any(m.id == current.id for m in combined):
             combined.append(current)
-        desired = {} if clear else layout(combined, gap_between_machines=settings.show_separator)
+        desired = {} if clear else layout(combined, gap_between_machines=settings.show_separator,
+                                         mode=settings.mode, fields=settings.visible_fields)
         # Fresh state before every attempt, including after ambiguous timeouts.
         now = time.monotonic()
         renew = not clear and now >= self.remote_renew.get(current.id, 0)
@@ -273,17 +275,12 @@ def presentation(herdr, store):
 
 
 def active(store):
-    path = store.state / "control.json"
-    if not path.exists():
-        return True
-    data = json.loads(path.read_text())
-    if data.get("schema") != 1 or type(data.get("active")) is not bool:
-        raise Conflict("Unsupported runtime state; existing state was preserved")
-    return data["active"]
+    return store.load().enabled
 
 
 def set_active(store, value):
-    atomic_write(store.state / "control.json", json.dumps({"schema": 1, "active": value}))
+    settings = store.load()
+    store.save(settings.with_active(settings.mode if value else None))
 
 
 def ensure(herdr, store):
@@ -302,30 +299,45 @@ def ensure(herdr, store):
 
 
 def apply(herdr, store):
-    if not herdr.enabled():
-        raise Conflict("Enable the plugin before applying its sidebar")
-    herdr.check_projection()
-    settings = store.load()
-    if presentation(herdr, store).apply(settings, validate=herdr.validate, replace_native_layout=True):
-        herdr.reload()
-    set_active(store, True)
-    ensure(herdr, store)
+    with lock(store.state / "operation.lock"):
+        if not herdr.enabled():
+            raise Conflict("Enable the plugin before applying its sidebar")
+        herdr.check_projection()
+        settings = store.load()
+        settings = settings.with_active(settings.mode)
+        if presentation(herdr, store).apply(settings, validate=herdr.validate, replace_native_layout=True):
+            herdr.reload()
+        set_active(store, True)
+        ensure(herdr, store)
 
 
 def save_settings(herdr, store, settings):
+    with lock(store.state / "operation.lock"):
+        _save_settings(herdr, store, settings)
+
+
+def _save_settings(herdr, store, settings):
+    """Caller holds the operation lock, including when restarting a worker."""
     settings = settings.normalized()
-    if not active(store) or not herdr.enabled():
+    previous = store.load()
+    if not herdr.enabled():
         store.save(settings)
         return
-    previous = store.load()
+    if not settings.enabled:
+        store.save(settings)  # Stop workers before clearing their tokens and rows.
+        stop_and_restore(herdr, store, native_defaults=True)
+        return
     herdr.check_projection()
     managed = presentation(herdr, store)
-    changed = managed.apply(settings, validate=herdr.validate)
+    changed = managed.apply(settings, validate=herdr.validate, replace_native_layout=not previous.enabled)
     try:
         store.save(settings)
     except (OSError, ValueError, Conflict):
         if changed:
-            managed.apply(previous, validate=herdr.validate)
+            if previous.enabled:
+                managed.apply(previous, validate=herdr.validate)
+            else:
+                managed.restore(validate=herdr.validate)
         raise
     if changed:
         herdr.reload()
@@ -351,7 +363,7 @@ def worker(herdr, store):
                     return
                 herdr.check_projection()
                 settings = store.load()
-                if presentation(herdr, store).apply(settings, validate=herdr.validate):
+                if presentation(herdr, store).apply(settings, validate=herdr.validate, replace_native_layout=True):
                     herdr.reload()
                 config_stamp = herdr.config.stat().st_mtime_ns
                 next_tick, failures = 0, 0
@@ -426,7 +438,13 @@ def worker(herdr, store):
 
 
 def restore(herdr, store):
-    set_active(store, False)
+    """Restore factory preferences and native presentation; both modes stay No."""
+    with lock(store.state / "operation.lock"):
+        store.save(Settings())
+        stop_and_restore(herdr, store, native_defaults=True)
+
+
+def stop_and_restore(herdr, store, *, native_defaults=False):
     # Wait for the current worker's own cleanup, without killing any process.
     path = store.state / (herdr.local_id.replace(":", "-") + ".lock")
     with lock(path, timeout=15):
@@ -435,11 +453,16 @@ def restore(herdr, store):
             engine.clear(store.load())
         finally:
             engine.close()
-        if presentation(herdr, store).restore(validate=herdr.validate):
+        if presentation(herdr, store).restore(validate=herdr.validate, native_defaults=native_defaults):
             herdr.reload()
 
 
 def restart(herdr, store):
-    """Restart this plugin's worker through its own lock, never Herdr or agents."""
-    restore(herdr, store)
-    apply(herdr, store)
+    """Reload this worker while preserving preferences and the activation choice."""
+    with lock(store.state / "operation.lock"):
+        previous = store.load()
+        set_active(store, False)
+        # An active restart needs its original ownership baseline intact.
+        stop_and_restore(herdr, store, native_defaults=not previous.enabled)
+        if previous.enabled:
+            _save_settings(herdr, store, previous)

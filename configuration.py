@@ -1,7 +1,7 @@
-"""Durable preferences and reversible ownership of three Herdr config fields."""
+"""Durable preferences and reversible ownership of Herdr presentation fields."""
 
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 import fcntl
 import json
 import os
@@ -11,17 +11,28 @@ import tempfile
 import time
 import tomllib
 
+from layout import DEFAULT_PRIORITY_LINES, GROUPED_VIEWS, MODES, SIDEBAR_FIELDS
+
 PLUGIN_ID = "c0r0nell.agents-sidebar"
 SOURCE = "plugin:" + PLUGIN_ID
 DEFAULT_ROWS = [["state_icon", "machine", "workspace", "tab"], ["agent"]]
-FIELDS = ("ui.agent_panel_sort", "ui.sidebar.agents.row_gap", "ui.sidebar.agents.rows")
+FIELDS = ("ui.sidebar.agents.row_gap", "ui.sidebar.agents.rows")
 # Colors offered in Settings; defaults follow the user's selected group palette.
 DRACULA_COLORS = {
     "Purple": "#bd93f9", "Pink": "#ff79c6", "White": "#f8f8f2",
     "Cyan": "#8be9fd", "Green": "#50fa7b", "Yellow": "#f1fa8c",
     "Red": "#ff5555", "Orange": "#ffb86c",
 }
-DEFAULT_COLORS = (DRACULA_COLORS["Yellow"], "#89b4fa", DRACULA_COLORS["Purple"])
+DARK_BLUE = "#6272a4"
+DEFAULT_COLORS = (DRACULA_COLORS["Yellow"], "#89b4fa", DRACULA_COLORS["Purple"], DARK_BLUE)
+# Factory snapshot approved on 2026-10-11: fixed Grouped tree, no separator;
+# Priority shows Project above the native Status, Agent and Tab.
+FACTORY_PRIORITY_LINES = (("project",), ("status", "agent", "tab"))
+LEGACY_VIEWS = ("agent", "agent/project", "agent/project/machine", "agent/project/machine/tab")
+PROFILE_FIELDS = {
+    "grouped": {"machine_color", "project_color", "agent_color", "tab_color", "view", "show_separator"},
+    "priority": {"machine_color", "project_color", "agent_color", "tab_color", "line1", "line2"},
+}
 
 
 class Conflict(RuntimeError):
@@ -38,26 +49,120 @@ def color(value):
 
 
 @dataclass(frozen=True)
-class Settings:
+class ModeSettings:
     machine_color: str = "default"
     project_color: str = "default"
     agent_color: str = "default"
-    show_separator: bool = True
+    tab_color: str = "default"
+    show_separator: bool = False
+    view: str = "agent"
+    line1: tuple = DEFAULT_PRIORITY_LINES[0]
+    line2: tuple = DEFAULT_PRIORITY_LINES[1]
 
     def normalized(self):
         if type(self.show_separator) is not bool:
             raise ValueError("Show separator must be On or Off")
-        return Settings(*(color(v) for v in (self.machine_color, self.project_color, self.agent_color)),
-                        show_separator=self.show_separator)
+        if self.view not in GROUPED_VIEWS:
+            raise ValueError("Choose a supported sidebar View")
+        lines = (self.line1, self.line2)
+        if any(not isinstance(line, (list, tuple)) for line in lines):
+            raise ValueError("Priority lines must be lists of fields")
+        names = tuple(name for line in lines for name in line)
+        if not names:
+            raise ValueError("Choose at least one field for the Priority view")
+        if any(not isinstance(name, str) or name not in SIDEBAR_FIELDS for name in names):
+            raise ValueError("Choose supported Priority fields")
+        if len(set(names)) != len(names):
+            raise ValueError("Each field can appear only once in the Priority view")
+        return replace(self, machine_color=color(self.machine_color),
+                       project_color=color(self.project_color), agent_color=color(self.agent_color),
+                       tab_color=color(self.tab_color), line1=tuple(self.line1), line2=tuple(self.line2))
+
+
+@dataclass(frozen=True)
+class Settings:
+    # Retain the selected profile when neither mode is enabled.
+    mode: str = "grouped"
+    enabled: bool = False
+    grouped: ModeSettings = field(default_factory=ModeSettings)
+    priority: ModeSettings = field(default_factory=lambda: ModeSettings(
+        line1=FACTORY_PRIORITY_LINES[0], line2=FACTORY_PRIORITY_LINES[1]))
+
+    def profile(self, mode=None):
+        mode = self.mode if mode is None else mode
+        if mode not in MODES:
+            raise ValueError("Mode must be Grouped or Priority")
+        return getattr(self, mode)
+
+    def with_profile(self, mode, **changes):
+        self.profile(mode)
+        if set(changes) - PROFILE_FIELDS[mode]:
+            raise ValueError("These settings do not belong to this mode")
+        return replace(self, **{mode: replace(self.profile(mode), **changes)})
+
+    def with_active(self, mode):
+        if mode is None:
+            return replace(self, enabled=False)
+        self.profile(mode)  # Validate the target before changing activation.
+        return replace(self, mode=mode, enabled=True)
+
+    @property
+    def visible_fields(self):
+        profile = self.profile()
+        if self.mode == "priority":
+            return profile.line1 + profile.line2
+        return ("machine", "project", "status", "agent") + (("tab",) if profile.view == "agent/tab" else ())
+
+    @property
+    def show_separator(self):
+        return self.profile().show_separator
+
+    def normalized(self):
+        if self.mode not in MODES:
+            raise ValueError("Mode must be Grouped or Priority")
+        if type(self.enabled) is not bool:
+            raise ValueError("Active must be Yes or No")
+        if not isinstance(self.grouped, ModeSettings) or not isinstance(self.priority, ModeSettings):
+            raise ValueError("Each mode must have its own settings profile")
+        return replace(self, grouped=self.grouped.normalized(), priority=self.priority.normalized())
 
     def rows(self):
+        if not self.enabled:
+            raise ValueError("Both modes are inactive; restore the native sidebar")
+        profile = self.profile()
         colors = [fallback if value == "default" else value for value, fallback in
-                  zip((self.machine_color, self.project_color, self.agent_color), DEFAULT_COLORS)]
+                  zip((profile.machine_color, profile.project_color, profile.agent_color, profile.tab_color), DEFAULT_COLORS)]
         def token(name, index, bold):
             return {"token": "$" + name, "fg": colors[index], "bold": bold}
+        if self.mode == "priority":
+            tokens = {"status": "state_icon", "agent": token("has_agent", 2, False),
+                      "tab": {"token": "tab", "fg": colors[3], "bold": False},
+                      "machine": token("has_machine", 0, True), "project": token("has_project", 1, True)}
+            return [[tokens[name] for name in line] for line in (profile.line1, profile.line2) if line]
+        tab = [{"token": "tab", "fg": colors[3], "bold": False}] if profile.view == "agent/tab" else []
         return [[token("has_machine", 0, True)], [token("has_project", 1, True)],
-                [token("has_agent_prefix", 2, False), "state_icon", token("has_agent", 2, False)],
+                [token("has_agent_prefix", 2, False), "state_icon", token("has_agent", 2, False)] + tab,
                 [token("has_gap", 0, True)]]
+
+
+def legacy_profile(data, mode):
+    """Translate earlier presets without guessing at unknown stored fields."""
+    data = dict(data)
+    view = data.pop("view", "agent/project/machine" if mode == "grouped" else "agent/project")
+    if view not in LEGACY_VIEWS:
+        raise Conflict("Unknown legacy View; preferences were preserved")
+    if "tab_color" in data or "line1" in data or "line2" in data:
+        raise Conflict("Mixed settings formats; preferences were preserved")
+    data["tab_color"] = data.get("agent_color", "default") if "tab" in view else "default"
+    if "tab" in view and data["tab_color"] == "default":
+        data["tab_color"] = DEFAULT_COLORS[2]
+    if mode == "grouped":
+        return ModeSettings(**data, view="agent/tab" if "tab" in view else "agent")
+    if "show_separator" in data and type(data["show_separator"]) is not bool:
+        raise ValueError("Show separator must be On or Off")
+    data.pop("show_separator", None)  # This field never affected Priority.
+    line1 = ("status", "agent") if view == "agent" else ("status",) + tuple(view.split("/")[1:])
+    return ModeSettings(**data, line1=line1, line2=() if view == "agent" else ("agent",))
 
 
 def private_directory(path):
@@ -120,21 +225,65 @@ class Store:
 
     def load(self):
         if not self.preferences.exists():
-            return Settings()
+            return Settings(enabled=self.legacy_active(default=False))
         data = tomllib.loads(self.preferences.read_text())
-        if data.pop("schema", None) != 1:
+        schema = data.pop("schema", None)
+        if type(schema) is not int or schema not in (1, 2, 3, 4):
             raise Conflict("Unsupported settings schema; preferences were preserved")
         try:
-            return Settings(**data).normalized()
-        except TypeError as error:
-            raise Conflict("Unknown settings fields; preferences were preserved") from error
+            if schema < 4:
+                if "enabled" in data:
+                    raise Conflict("Mixed settings formats; preferences were preserved")
+                data["enabled"] = self.legacy_active()
+            elif "enabled" not in data:
+                raise Conflict("Missing activation preference; preferences were preserved")
+            if schema == 1:
+                shared = {name: data.pop(name) for name in ("machine_color", "project_color", "agent_color", "show_separator")
+                          if name in data}
+                grouped = legacy_profile({**shared, "view": data.pop("grouped_view", "agent/project/machine")}, "grouped")
+                priority = legacy_profile({**shared, "view": data.pop("priority_view", "agent/project")}, "priority")
+            elif schema == 2:
+                grouped = legacy_profile(data.pop("grouped", {}), "grouped")
+                priority = legacy_profile(data.pop("priority", {}), "priority")
+            else:
+                profiles = {}
+                for mode in MODES:
+                    values = data.pop(mode, {})
+                    if not isinstance(values, dict) or set(values) - PROFILE_FIELDS[mode]:
+                        raise Conflict("Unknown or misplaced profile fields; preferences were preserved")
+                    if schema == 4:
+                        defaults = asdict(Settings().profile(mode))
+                        values = {**{key: defaults[key] for key in PROFILE_FIELDS[mode]}, **values}
+                    profiles[mode] = ModeSettings(**values)
+                grouped, priority = profiles["grouped"], profiles["priority"]
+            return Settings(**data, grouped=grouped, priority=priority).normalized()
+        except (TypeError, ValueError) as error:
+            raise Conflict("Unknown or malformed settings fields; preferences were preserved") from error
+
+    def legacy_active(self, *, default=True):
+        """Read the old pause receipt only until preferences are saved as schema 4."""
+        path = self.state / "control.json"
+        if not path.exists():
+            return default
+        try:
+            data = json.loads(path.read_text())
+        except ValueError as error:
+            raise Conflict("Unsupported runtime state; existing state was preserved") from error
+        if not isinstance(data, dict) or data.get("schema") != 1 or type(data.get("active")) is not bool:
+            raise Conflict("Unsupported runtime state; existing state was preserved")
+        return data["active"]
 
     def save(self, settings):
         settings = settings.normalized()
         private_directory(self.config)
         with lock(self.config / "settings.lock"):
             self.load()  # Refuse to replace a newer schema.
-            text = "schema = 1\n" + "".join(f"{k} = {toml(v)}\n" for k, v in asdict(settings).items())
+            text = "schema = 4\n" + f"mode = {toml(settings.mode)}\nenabled = {toml(settings.enabled)}\n"
+            for mode in MODES:
+                values = asdict(settings.profile(mode))
+                for name in (("line1", "line2") if mode == "grouped" else ("view", "show_separator")):
+                    values.pop(name)
+                text += f"\n[{mode}]\n" + "".join(f"{k} = {toml(v)}\n" for k, v in values.items())
             atomic_write(self.preferences, text)
 
 
@@ -145,7 +294,7 @@ def toml(value):
         return json.dumps(value, ensure_ascii=False)
     if isinstance(value, int):
         return str(value)
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return "[" + ", ".join(toml(v) for v in value) + "]"
     if isinstance(value, dict):
         return "{" + ", ".join(k + " = " + toml(v) for k, v in value.items()) + "}"
@@ -251,6 +400,17 @@ class Presentation:
     def _read(self):
         return self.config.read_text() if self.config.exists() else ""
 
+    @staticmethod
+    def _restored_text(current, receipt):
+        if current == receipt["installed"]:
+            return receipt["original"]
+        text = current
+        for name, field in receipt["fields"].items():
+            actual = spans(text)[0].get(tuple(name.split(".")))
+            if actual and actual[2] == field["installed"]:
+                text = rewrite(text, name, raw=field["original"], remove=field["original"] is None)
+        return text
+
     def _journal(self):
         if not self.receipt.exists():
             return None
@@ -312,7 +472,7 @@ class Presentation:
                                                     (replace_native_layout and native_only)):
                     raise Conflict("A custom agent layout already exists; no configuration was changed")
             text = original
-            values = ("spaces", 0, settings.rows())
+            values = (0, settings.rows())
             for name, value in zip(FIELDS, values):
                 text = rewrite(text, name, value)
             try:
@@ -333,7 +493,9 @@ class Presentation:
             installed_spans, _ = spans(text)
             if self._read() != original:
                 raise Conflict("Configuration changed during validation; the user's edit was preserved")
-            fields = {}
+            # Keep legacy ownership records for safe restoration, but stop
+            # writing or checking native order. Mode is visual-only.
+            fields = dict(receipt["fields"]) if receipt else {}
             for name in FIELDS:
                 path = tuple(name.split("."))
                 previous = original_spans.get(path)
@@ -341,7 +503,7 @@ class Presentation:
                                 previous[2] if previous else None,
                                 "installed": installed_spans[path][2]}
             journal = {"schema": 1, "config": str(self.config), "phase": "prepared",
-                       "original": receipt["original"] if receipt else original,
+                       "original": self._restored_text(original, receipt) if receipt else original,
                        "before": original, "previous": receipt,
                        "installed": text, "fields": fields}
             atomic_write(self.receipt, json.dumps(journal))
@@ -359,22 +521,30 @@ class Presentation:
             atomic_write(self.receipt, json.dumps(journal))
             return True
 
-    def restore(self, validate=None):
+    def restore(self, validate=None, *, native_defaults=False):
         private_directory(self.state)
         with lock(self.state / "presentation.lock"):
             receipt = self._journal()
-            if not receipt:
-                return False
             current = self._read()
-            if current == receipt["installed"]:
-                text = receipt["original"]
-            else:
-                text = current
-                for name, field in receipt["fields"].items():
-                    actual = spans(text)[0].get(tuple(name.split(".")))
-                    if actual and actual[2] == field["installed"]:
-                        text = rewrite(text, name, raw=field["original"], remove=field["original"] is None)
+            text = self._restored_text(current, receipt) if receipt else current
+            if native_defaults:
+                # Explicitly choosing both No means Herdr's built-in layout,
+                # rather than a previous native-only customization. Lifecycle
+                # cleanup still uses the reversible receipt without this flag.
+                agents = tomllib.loads(text).get("ui", {}).get("sidebar", {}).get("agents", {})
+                rows = agents.get("rows", DEFAULT_ROWS)
+                native_tokens = {"state_icon", "machine", "workspace", "tab", "agent"}
+                native_only = isinstance(rows, list) and bool(rows) and all(
+                    isinstance(row, list) and bool(row) and all(
+                        isinstance(token, str) and token in native_tokens for token in row
+                    ) for row in rows
+                )
+                if agents.get("rows_by_agent") or not native_only:
+                    raise Conflict("A custom agent layout exists; native defaults were not applied")
+                for name in FIELDS:
+                    text = rewrite(text, name, remove=True)
             if text != current:
                 self._publish(text, validate, expected=current)
-            self.receipt.unlink()
+            if receipt:
+                self.receipt.unlink()
             return text != current

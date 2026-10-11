@@ -2,6 +2,7 @@
   "herdr": "0.9.3",
   "protocol": 22,
   "width": 36,
+  "show_separator": false,
   "transport": "local SSH shim, real Herdr servers and bridges",
   "rows": [
     " machine01",
@@ -10,7 +11,6 @@
     "      · ○ agente02",
     "   projeto02",
     "      · ○ agente03",
-    "   ·",
     " machine02",
     "   projeto01",
     "      · ○ agente01",
@@ -25,9 +25,8 @@
       "· ○ agente01",
       "· ○ agente02",
       "projeto02",
-      "· ○ agente03",
-      "·"
+      "· ○ agente03"
     ],
-    "result": "shared gap token trails the final local agent"
+    "result": "disabled machine gaps remain absent in a local-only client"
   }
 }

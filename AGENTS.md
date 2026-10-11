@@ -1,7 +1,7 @@
 # Working in this repository
 
 Read [specs.md](specs.md) before implementation. It defines the user's sidebar
-behavior and boundaries. The runtime and four-option settings are implemented
+behavior and boundaries. The runtime and settings are implemented
 and tested in isolated Herdr sessions. The user authorized local activation on
 2026-10-10; the main environment now links this checkout using the official ID.
 The user approved version `0.1.0` and authorized public GitHub publication on
@@ -68,6 +68,9 @@ Use atomic writes, bounded locks, and migrations that reject ambiguous conflicts
 Never silently overwrite the user's later configuration changes.
 
 Herdr owns agent identities, lifecycle state, order, machines, and sessions.
+Settings' Active control changes presentation only. Users choose Grouped/Priority in Herdr
+separately; never synchronize by reading private client preferences. Preserve
+native ordering configuration and keep Priority rows self-contained.
 Use only documented APIs. Scope identities by machine, session, workspace, and
 pane. Publish only this plugin's tokens; never rename agents or assume authority
 over their state. Detect another plugin's active projection before replacing it.

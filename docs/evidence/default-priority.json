@@ -1,0 +1,38 @@
+{
+  "herdr": "herdr 0.9.3",
+  "mode": "priority",
+  "native_order": "priority",
+  "width": 36,
+  "preferences": {
+    "machine_color": "default",
+    "project_color": "default",
+    "agent_color": "default",
+    "tab_color": "default",
+    "show_separator": false,
+    "view": "agent",
+    "line1": [
+      "project"
+    ],
+    "line2": [
+      "status",
+      "agent",
+      "tab"
+    ]
+  },
+  "transport": "local SSH shim, real Herdr servers and bridges",
+  "capture": "factory profile activated through the real Settings popup",
+  "rows": [
+    " project01",
+    "   × agent05 · tab01",
+    " project01",
+    "   ◐ agent02 · tab01",
+    " project02",
+    "   ○ agent06 · tab02",
+    " project01",
+    "   ○ agent04 · tab01",
+    " project02",
+    "   ○ agent03 · tab02",
+    " project01",
+    "   ○ agent01 · tab01"
+  ]
+}

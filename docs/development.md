@@ -15,13 +15,24 @@ For a requested local installation, run from this checkout:
 
 ```sh
 herdr plugin link "$PWD/herdr-plugin.toml" --enabled
-herdr plugin action invoke apply --plugin c0r0nell.agents-sidebar
 ```
 
-Linking does not run startup hooks immediately. Apply sidebar activates it now;
-startup and native activity hooks ensure it runs in later server sessions. Use
+New installations are enabled in Herdr, but both modes start inactive. Open
+Settings and set the chosen profile's Active to Yes; this applies its layout
+immediately. Existing preferences and activation survive updates and reinstall.
+Once a profile is active, startup and native workspace/tab/pane focus or agent
+detection/status events ensure its worker is running. Herdr 0.9.3 has no post-install
+hook: install/link/enable do not run startup hooks, and build commands have no
+session socket context. A running session therefore applies the sidebar on the
+next real navigation or agent event if a saved mode is active; offline installs
+also respect the saved activation at startup.
+There is no Apply action in the Plugin Manager. Use
 Restart sidebar after code edits or managed updates; Settings changes apply live.
-Restore sidebar stops its workers and restores only its owned presentation.
+Restart never activates an inactive mode or resets preferences. Restore defaults
+resets both profiles to the factory snapshot, stops workers and restores only
+the owned native presentation. Both Active controls become No. Setting either
+to Yes resumes that profile without a separate restart. Turning Active to No
+also restores native presentation, but preserves both customized profiles.
 Disabling/unlinking/uninstalling also triggers worker cleanup without ending agents.
 
 GitHub installs on another machine consume published commits. The Plugin Manager
@@ -36,21 +47,72 @@ Default paths are:
 ```text
 ~/.config/herdr/plugins/config/c0r0nell.agents-sidebar/settings.toml
 ~/.local/state/herdr/plugins/c0r0nell.agents-sidebar/presentation.json
-~/.local/state/herdr/plugins/c0r0nell.agents-sidebar/control.json
 ```
 
-Settings use schema 1 and private atomic writes. State contains config ownership,
+Settings use schema 4 and private atomic writes. Schemas 1, 2 and 3 remain readable
+without modifying files. Shared colors become independent profiles; older
+Priority presets become ordered fields on two lines. Grouped restores the fixed
+tree, retaining optional Tab. Existing visible tabs retain their previous color;
+new tabs default to Dark blue (#6272a4). The selected mode and Grouped separator are preserved.
+The next save writes the new format, rejecting unknown fields, mixed formats,
+misplaced mode-specific fields and newer schemas.
+The selected `mode` and boolean `enabled` are the single activation record.
+When neither mode is active, the selected profile is remembered for reopening
+Settings. Legacy `control.json` pause records are read during migration; schema 4
+is authoritative afterward, so old runtime flags cannot override new settings.
+State contains config ownership,
 bounded worker locks and small error records, without persisted agent snapshots
 or transcripts. The ownership receipt includes the original Herdr configuration
 for restoration, including any private values already in that configuration.
 Directories use owner-only permissions (0700), and files use 0600. The plugin
 does not read agent credentials. Updates and source removal preserve these directories.
 
-Configuration changes are limited to `ui.agent_panel_sort`,
-`ui.sidebar.agents.row_gap` and `ui.sidebar.agents.rows`. Explicit Apply sidebar
-can replace a layout containing only known native tokens, preserving it for
-restoration. Automatic startup refuses nondefault layouts. Foreign custom tokens
-and `rows_by_agent` conflict. Later edits to owned fields are preserved on restoration;
+The factory snapshot is defined by Settings in configuration.py. It follows the
+user-approved profiles captured on 2026-10-11: Grouped's fixed tree with View Agent
+and Show separator Off; Priority has Project on line 1 and Status/Agent/Tab on
+line 2. Both profiles use default Yellow/Blue/Purple/Dark blue colors. Both modes
+are inactive. Factory reset uses the same defaults as a new installation;
+existing saves, including old active modes, are not reset by upgrades.
+User operations serialize under a bounded operation lock; workers have their own
+lock so cleanup can finish before reactivation without competing config writes.
+Existing saved choices, including Show separator On,
+are preserved. Settings without a `mode` field load as Grouped. Priority uses two
+native rows per agent: project above, native status, agent and tab below.
+Its default hides machine labels and gaps; identities remain scoped by machine.
+Settings has Grouped and Priority tabs, each with Active, View and four colors.
+Left/right or Tab changes the inspected profile without activating it. Active
+allows zero or one active profile: Yes deactivates the other profile, and No on
+the active profile stops workers, clears owned tokens and removes the Rows and
+Row gap overrides so Herdr supplies its default native layout, including Machine.
+Both No persists across startup, navigation and reinstall. Editing
+inactive profiles does not activate them or change the live rows.
+Show separator appears only in Grouped.
+Grouped View selects Agent or Agent / Tab; machine/project headings remain fixed.
+Priority View opens a draft editor for Status, Agent, Tab, Machine and Project.
+Enter cycles a field through Hidden, Line 1, Line 2 and Hidden; left/right reorders
+it within its assigned line. Save view applies the draft; Escape discards it.
+Each field appears at most once, at least one field must remain, and empty lines
+are omitted. The native renderer supplies separators, offsets and clipping.
+`[grouped]` saves View and Show separator; `[priority]` saves ordered `line1` and
+`line2` arrays. Both save their own four colors. Tab uses the native `tab` token
+and an independent color, without another tree level or a copied label. Status
+remains the unstyled native `state_icon` at its chosen position. Hidden Priority
+fields clear owned tokens; native identities and ordering remain unchanged.
+Mode chooses presentation only. For the Grouped tree, select Grouped using
+Herdr's native heading so machines and projects stay together. Priority rows
+keep their context under either native order; choosing native Priority adds
+activity-based sorting. Settings never synchronizes that client-local choice.
+No private client preferences are read.
+
+Configuration changes are limited to `ui.sidebar.agents.row_gap` and
+`ui.sidebar.agents.rows`. Native `ui.agent_panel_sort` is preserved. Existing
+0.1.0 receipts retain old sort ownership for safe cleanup, without new sort writes.
+Automatic activation can replace a layout containing only known native tokens,
+preserving it for lifecycle restoration. Both No and Restore defaults explicitly
+request Herdr's built-in rows rather than that earlier native customization.
+Disable/unlink/uninstall, failures and an active Restart still use the reversible
+receipt. Foreign custom tokens and `rows_by_agent` conflict. Later edits to owned
+fields are preserved by lifecycle restoration;
 unrelated sections, comments and shortcuts are preserved. Native config check
 validates every proposed change before publishing it.
 

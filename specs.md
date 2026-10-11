@@ -6,7 +6,10 @@ Especificação para outro agente implementar. Atualizada em 11/10/2026.
 
 ## 1. Objetivo e decisões do usuário
 
-Organizar visualmente a seção nativa de agentes por **Máquina → Projeto → Agente**, sem alterar o código ou fazer fork do Herdr.
+Organizar visualmente a seção nativa de agentes, oferecendo **Grouped**
+(Máquina → Projeto → Agente por padrão) e **Priority** (duas linhas por agente
+por padrão), com contexto configurável, sem alterar
+o código ou fazer fork do Herdr.
 
 Formato escolhido:
 
@@ -17,7 +20,6 @@ machine01
      · ○ agente02
   projeto02
      · ○ agente03
-·
 machine02
   projeto01
      · ○ agente01
@@ -30,10 +32,78 @@ Regras visuais:
 - Máquina: sem marcador, amarelo (`#f1fa8c`) e negrito por padrão; aparece uma vez por bloco.
 - Projeto: sem marcador, azul (`#89b4fa`) e negrito por padrão; aparece uma vez por projeto dentro da máquina, com duas células de recuo em relação à máquina.
 - Agente: nome sem marcador `>`, roxo (`#bd93f9`) por padrão e indicador de estado nativo antes do nome, sem copiar estados para tokens próprios. Compensar o recuo antes do ícone para que ele e os nomes fiquem alinhados mesmo nas entradas sem cabeçalhos. O Herdr acrescenta um ponto inline antes do ícone, formando `· ○ nome`; em 11/10/2026 o usuário aceitou esse ponto para corrigir o desalinhamento.
-- Uma linha contendo somente `·` entre máquinas, na mesma cor do cabeçalho da máquina imediatamente acima. Não inserir linhas em branco nem separadores entre projetos/agentes. Em 10/10/2026, o usuário aceitou que o ponto permaneça ao final quando outro cliente mostra menos máquinas: os tokens são compartilhados no servidor, enquanto o catálogo é do cliente.
-- Não acrescentar um nível para tabs, controles de expansão ou ícones que exijam fontes especiais.
+- Quando Show separator está ligada, uma linha contendo somente `·` entre máquinas, na mesma cor do cabeçalho da máquina imediatamente acima. A opção começa desligada; escolhas já salvas são preservadas. Não inserir linhas em branco nem separadores entre projetos/agentes. Em 10/10/2026, o usuário aceitou que o ponto permaneça ao final quando outro cliente mostra menos máquinas: os tokens são compartilhados no servidor, enquanto o catálogo é do cliente.
+- Não acrescentar um nível para tabs, controles de expansão ou ícones que exijam
+  fontes especiais. A aba (Tab) pode aparecer como contexto inline quando
+  selecionada em View, conforme pedido posterior do usuário em 11/10/2026.
 - Em 11/10/2026, o usuário pediu remover todos os `>` e inicialmente o ponto inline antes do ícone. Após reproduzir o desalinhamento dos ícones sem esse ponto, aprovou manter o ponto inline para alinhá-los. Todos os `>` continuam removidos. O ponto opcional entre máquinas continua separado dessa decisão.
 - Em 11/10/2026, após experimentar as cores em Settings, o usuário definiu Default como Machine = Yellow, Project = Blue e Agent = Purple, nos tons já oferecidos pelo menu. Isso substitui as propostas intermediárias. Não alterar o tema global nem as cores de status do Herdr; escolhas explícitas em Settings continuam preservadas.
+- Em 11/10/2026, o usuário pediu Mode como primeira opção de Settings, com
+  Grouped/Priority. Grouped mantém a árvore já aprovada. Priority inicialmente
+  colocou status/projeto acima e IA abaixo; o snapshot posterior do usuário
+  substitui esse default por Project na primeira linha e Status/Agent/Tab na segunda.
+  Não mostrar a máquina no View padrão
+  de Priority; o usuário pode acrescentá-la com View.
+  Preservar as cores de projeto e agente e o status nativo. Esse formato foi
+  escolhido pelo usuário em 11/10/2026. Não renderizar cabeçalhos separados,
+  recuos de árvore ou separadores entre máquinas nesse modo. Show separator
+  continua salva e volta a valer ao retornar para Grouped.
+- Em 11/10/2026, o usuário pediu View por modo e inicialmente propôs presets
+  cumulativos. O pedido mais recente substitui esses presets: **Grouped** oferece
+  somente Agent ou Agent / Tab, mantendo sempre a árvore Máquina → Projeto → Agente.
+  Tab aparece após o nome do agente, na mesma linha e sem um nível novo.
+- **Priority** permite montar as duas linhas de cada agente com os campos Status,
+  Agent, Tab, Machine e Project. O usuário decide quais mostrar, em qual linha e
+  em qual ordem; cada campo pode aparecer uma vez. O indicador Status é o token
+  nativo, incluindo suas cores e estados, e pode ser movido ou escondido. Exigir
+  pelo menos um campo no conjunto; uma linha vazia é omitida. Manter o layout
+  padrão do snapshot mais recente (Project acima, Status/Agent/Tab abaixo), sem impor presets.
+- As quatro cores (Machine, Project, Agent e Tab) são independentes por modo.
+  Tab começa em Dark blue (`#6272a4`), conforme pedido posterior do usuário;
+  os três defaults anteriores continuam iguais.
+  Usar o token nativo `tab`, sem copiar o título da aba ou criar agrupamentos.
+- Em pedido posterior em 11/10/2026, o usuário substituiu o seletor Mode por
+  duas abas **Grouped | Priority** dentro de Settings. Cada aba tem **Active**,
+  View e suas próprias cores. Navegar entre abas não ativa o modo. Só um modo
+  pode estar ativo: colocar Active em Yes desativa o outro. Em pedido posterior,
+  o usuário permitiu os dois em No: desativar o modo ativo restaura a sidebar
+  nativa, sem ativar o outro nem apagar preferências. Show separator fica na aba Grouped, pois só esse layout
+  permite um separador entre blocos de máquinas. As configurações de organização
+  continuam correspondendo aos layouts nativos já aprovados.
+- A escolha de Mode é manual e altera somente o visual do plugin. O usuário
+  escolhe a ordem Grouped/Priority no próprio Herdr separadamente. A API 0.9.3
+  não expõe a escolha atual por janela; não ler arquivos privados do cliente,
+  instalar projeções para sincronizar ou modificar `ui.agent_panel_sort`.
+  O plugin suporta os dois modos; a dependência da ordem nativa Grouped vale
+  somente para a árvore Grouped. As linhas de Priority carregam seu contexto
+  por agente e funcionam nas duas ordens nativas. A escolha em Settings não muda
+  o botão de ordenação no Herdr.
+- O usuário inicialmente pediu ativação automática após instalar e remover Apply do menu.
+  Na baseline 0.9.3, install/link/enable não executam startup e não há hook de
+  pós-instalação. Usar startup e eventos nativos de navegação/agentes para aplicar
+  sem uma ação extra no Plugin Manager. Na sessão aberta, isso acontece na primeira
+  atividade correspondente após o registro; uma instalação offline aplica ao iniciar
+  o Herdr. Não prometer execução síncrona ao retornar o instalador nessa baseline.
+  A ativação pode assumir um layout composto somente de tokens nativos, com recibo
+  reversível; projeções/tokens de terceiros e mudanças posteriores permanecem
+  protegidos. Em pedido posterior, substituiu a ativação inicial automática:
+  a instalação nova deixa o plugin habilitado no Herdr, com ambos Active = No.
+  O usuário deve abrir Settings e escolher o modo colocando-o em Yes. Startup e
+  eventos respeitam essa escolha, sem ativar os modos pausados. Atualizações e
+  reinstalações preservam preferências e ativação existentes.
+- Em 11/10/2026, o usuário pediu adotar seus perfis atuais como snapshot de
+  fábrica portátil: Grouped com a árvore fixa, View Agent e Show separator Off;
+  Priority com Project na linha 1 e Status/Agent/Tab na linha 2. As cores default
+  nos dois modos continuam Yellow, Blue, Purple e Dark blue. Ambos começam em No.
+  Restore defaults deve restaurar exatamente esse snapshot e a sidebar nativa;
+  Restart sidebar apenas recarrega o worker e preserva perfis e ativação.
+- Em pedido posterior em 11/10/2026, o usuário esclareceu que Restore defaults
+  e colocar ambos Active em No devem usar o layout nativo padrão completo do
+  Herdr, incluindo Machine. Remover os overrides próprios de Rows e Row gap,
+  em vez de recuperar uma personalização antiga somente com tokens nativos que
+  escondia a máquina. Não alterar ordenação, tema ou atalhos; recusar layouts de
+  terceiros. Disable/unlink/uninstall e falhas continuam usando a restauração
+  reversível da configuração anterior, preservando mudanças posteriores.
 
 **Recolhimento está fora do escopo.** Não implementar gavetas, filtros para simular recolhimento, cliques em cabeçalhos ou uma alternativa em painel próprio. O usuário quer agrupamento visual dentro da sidebar nativa.
 
@@ -61,26 +131,77 @@ A implementação de referência usa **U+2800**, a célula braille em branco, pa
 
 Esse mecanismo torna o separador visual possível sem mudar o Herdr. Validar o ponto e sua cor no terminal usado pelo usuário, inclusive quando o agente está focado. Não usar espaçamento global como substituto nem adicionar uma opção de linha em branco à implementação solicitada.
 
-### Settings — decisão do usuário em 10/10/2026
+### Settings — decisões do usuário em 10/10 e 11/10/2026
 
-O plugin terá uma ação **Settings**, com somente quatro opções na tela:
+O plugin tem uma ação **Settings** com duas abas independentes:
 
 ```text
+Grouped | Priority
+
+Grouped:
+Active           [Yes/No]
+View             [Agent / Agent+Tab]
 Machine color    [Default e outras cores]
 Project color    [Default e outras cores]
 Agent color      [Default e outras cores]
+Tab color        [Default e outras cores]
 Show separator   [On/Off]
+
+Priority:
+Active           [Yes/No]
+View             [Edit lines]
+Machine color    [Default e outras cores]
+Project color    [Default e outras cores]
+Agent color      [Default e outras cores]
+Tab color        [Default e outras cores]
+Line 1           [campos na ordem escolhida]
+Line 2           [campos na ordem escolhida]
 ```
 
-O usuário escolhe cores com setas e Enter, e fecha com Esc. As alterações são
-salvas e aplicadas sem reinstalação. A preferência `show_separator` começa ligada,
-para facilitar comparar o ponto com sua ausência. O popup de settings não
-substitui a sidebar por um painel próprio. Preferências ficam fora do checkout.
-Show separator controla somente o ponto entre máquinas, não o ponto inline nativo.
-Default usa Yellow, Blue e Purple nos tons fixos do menu, independentemente do
-tema do Herdr. As cores explicitamente escolhidas pelo usuário prevalecem sobre Default.
+O editor de View em Priority mostra as duas linhas e os cinco campos disponíveis.
+Enter muda o campo selecionado entre Hidden, Line 1, Line 2 e Hidden; esquerda e
+direita ajustam sua posição dentro da linha. Save view valida e aplica o conjunto;
+Esc descarta o rascunho sem escrever. Exemplo possível, conforme o usuário:
 
-O renderer nativo usa offsets diferentes na primeira linha e nas linhas seguintes de uma entrada. Compensar a posição por células, usando um token de espaçadores U+2800 antes do `state_icon`. O separador inline ` · ` imposto pelo Herdr entre esse token e o ícone foi aceito pelo usuário para manter ícones e nomes alinhados. Não acrescentar `>` a esse token nem copiar estados para produzir ícones próprios. A API examinada não permite alinhar também os ícones sem esse ponto, linhas extras ou alterações no Herdr.
+```text
+Line 1  [Machine | Project]
+Line 2  [Status | Agent | Tab]
+```
+
+O usuário troca abas com esquerda/direita ou Tab, escolhe campos e cores com
+cima/baixo e Enter, e fecha com Esc. As alterações confirmadas são salvas e
+aplicadas sem reinstalação. Show separator começa desligada e só controla o ponto
+entre máquinas, não o ponto inline nativo. Escolhas já salvas são preservadas.
+O popup não substitui a sidebar por um painel próprio. Preferências ficam fora
+do checkout.
+
+Zero ou um modo pode estar ativo. Os dois Active em No param os workers e limpam
+somente os tokens próprios, removendo os overrides de linhas e espaçamento para
+usar a apresentação nativa padrão do Herdr, incluindo Machine. Esse
+estado persiste ao navegar, reiniciar ou reinstalar. Colocar um modo em Yes retoma
+seu perfil salvo e desativa o outro. Navegar entre abas ou editar a inativa não muda
+o modo ativo nem a apresentação atual. Trocar Active não altera a ordem nativa
+do Herdr. A máquina permanece na identidade mesmo quando escondida em Priority.
+Cada modo salva suas quatro cores e organização separadamente. O schema 4 guarda
+`enabled` e o último `mode` selecionado, além de
+View/Show separator em Grouped e listas ordenadas `line1`/`line2` em Priority.
+
+Preferências antigas dos schemas 1, 2 e 3 são carregadas sem reescrita imediata.
+Cores compartilhadas viram perfis independentes; o modo ativo e o separador de
+Grouped são preservados. Presets antigos de Priority viram as mesmas linhas;
+Grouped mantém Tab quando selecionada e volta à árvore fixa solicitada. Tabs
+já visíveis mantêm sua cor anterior durante a migração. A próxima gravação usa
+schema 4. Preservar pausas do antigo `control.json` ao migrar; depois disso a
+ativação de Settings é a única fonte de verdade. Recusar formatos ambíguos, campos de outro modo e schemas desconhecidos
+sem sobrescrever os arquivos.
+
+Default usa Yellow, Blue, Purple e Dark blue nos tons fixos do menu, independentemente
+do tema do Herdr. Cores explícitas prevalecem. Status mantém a paleta nativa.
+O renderer nativo usa offsets diferentes na primeira linha e nas seguintes de
+cada entrada. Em Grouped, compensar por células com U+2800 antes de `state_icon`,
+aceitando o separador inline ` · ` aprovado pelo usuário, sem `>` nem cópia de
+estado. Em Priority, respeitar a posição escolhida do ícone e os offsets,
+separadores e corte de texto fornecidos pelo Herdr.
 
 ## 3. Modelo e fonte de verdade
 
@@ -93,15 +214,35 @@ O Herdr é a única fonte de verdade para máquinas, sessões, workspaces, panes
 
 Chaves devem incluir máquina/conexão, sessão e IDs nativos de workspace/pane. Máquinas diferentes podem ter `w1`, `w1:p1`, projetos homônimos e agentes com o mesmo nome.
 
-Preservar a ordem nativa de máquinas, workspaces e panes. Não reordenar automaticamente por atividade nem mover workspaces reais. Usar ordenação por espaços na apresentação para manter projetos contíguos; registrar e restaurar somente as alterações de configuração pertencentes ao plugin.
+Preservar a ordem nativa de máquinas, workspaces e panes. Não reordenar automaticamente
+por atividade nem mover workspaces reais. Para a árvore Grouped, o usuário escolhe
+a ordem por espaços no Herdr para manter projetos contíguos. O plugin modifica
+somente o layout e publica seus tokens; registrar e restaurar somente as alterações
+de configuração pertencentes ao plugin. Recibos antigos que já registravam a
+ordenação permanecem válidos para restauração, sem novas escritas nesse campo.
 
-Para cada lista ordenada atual:
+No modo Grouped, para cada lista ordenada atual:
 
 1. Identificar o primeiro agente real de cada máquina e atribuir-lhe o cabeçalho da máquina.
 2. Identificar o primeiro agente real de cada projeto nessa máquina e atribuir-lhe o nome, com recuo de projeto.
 3. Atribuir a todos os agentes o espaçador de recuo antes do indicador de estado nativo e o nome após o ícone, sem marcador `>`; aceitar o ponto inline nativo.
 4. Atribuir o separador `·`, na cor da máquina, ao último agente de cada máquina, exceto a última.
 5. Limpar tokens que deixaram de ser aplicáveis após mudanças na lista.
+
+View controla somente o conteúdo visível, sem filtrar agentes ou mudar suas
+identidades. Em Grouped, os cabeçalhos de máquina e projeto continuam presentes
+em ambas as opções. Agent / Tab acrescenta o título nativo da aba depois do nome,
+sem outra linha ou nível na árvore.
+
+No modo Priority, cada agente recebe seu próprio contexto selecionado, sem
+âncoras de árvore. Limpar `has_agent_prefix`, `has_gap` e tokens de campos
+escondidos. Renderizar os campos na ordem salva de cada linha, usando os tokens
+nativos `state_icon` e `tab` nas posições escolhidas. O padrão usa duas linhas:
+Project e Status/Agent/Tab. Linhas vazias são omitidas; não permitir ambas vazias.
+As duas linhas pertencem ao mesmo agente e focam o mesmo pane. O Herdr fornece
+posição, indicador, ordenação e corte de textos longos. Manter as mesmas chaves
+compostas e a publicação incremental nos dois modos, mesmo quando Agent,
+Machine ou Project não estiverem visíveis.
 
 No caso de contexto incompleto, não descartar um agente; apresentar um nome de grupo explícito e registrar o problema. Desconexão não prova exclusão. Dados em cache precisam ser identificados como desatualizados.
 
@@ -150,6 +291,12 @@ Preferências vivem nos diretórios próprios, com gravação atômica e formato
 
 Desabilitar/remover deve limpar somente tokens/projeções próprios e restaurar a apresentação anterior, sem interromper agentes ou apagar projetos. Não exigir Herdr Web UI, abrir portas ou adicionar telemetria. A integração no Web UI só pode ser afirmada após teste, sem alterar seu código.
 
+Instalações novas usam o snapshot de fábrica com ambos Active = No, mantendo
+o registro habilitado para abrir Settings. Active = No preserva os perfis atuais;
+Restore defaults substitui os dois pelo snapshot de fábrica e mantém ambos No.
+Restart não altera as escolhas de ativação nem os perfis salvos. Serializar
+operações do usuário com lock limitado, sem impedir a limpeza do worker.
+
 ## 6. Etapas para o implementador
 
 ### Etapa 0 — Prova visual isolada
@@ -178,6 +325,21 @@ Instalação no ambiente principal: etapa posterior autorizada pelo usuário em 
 - [x] Exibe máquina uma vez por bloco e projeto uma vez por máquina/workspace.
 - [x] Não acrescenta `>`; nomes de projetos e agentes têm recuos distintos e consistentes, e ícones nativos ficam alinhados usando o ponto inline aceito pelo usuário.
 - [x] Máquina amarela/negrito, projeto azul/negrito, agente roxo por padrão; opções de cores preservadas e indicador de estado nativo inalterado.
+- [x] Settings tem abas Grouped e Priority; Priority usa duas linhas por agente
+  por padrão, com projeto acima e status, IA e aba abaixo.
+  A escolha de ordem no Herdr permanece manual.
+- [x] Grouped oferece somente Agent ou Agent / Tab, mantendo a árvore completa.
+- [x] Priority permite montar as duas linhas, esconder e ordenar os cinco campos,
+  incluindo o status nativo. Cancelar preserva os arquivos; uma View vazia é recusada.
+- [x] As quatro cores, incluindo Tab, são independentes por modo e sobrevivem
+  às atualizações e à migração das preferências antigas.
+- [x] Active permite zero ou um modo habilitado; os dois No restauram a sidebar
+  nativa e preservam ambos os perfis. Yes retoma somente o modo escolhido. Navegar e editar a aba
+  inativa preservam a sidebar atual e suas preferências, inclusive após migração.
+- [x] Uma instalação nova fica habilitada no Herdr, com ambos Active = No, até
+  a escolha em Settings; upgrades não sobrescrevem escolhas existentes.
+- [x] Restore defaults volta ao snapshot dos dois modos, com ambos No; Restart
+  recarrega somente o worker e preserva perfis e ativação.
 - [x] Exibe uma linha com `·` entre máquinas quando habilitada, na cor do cabeçalho da máquina imediatamente acima; nenhuma linha em branco adicional. Pode sobrar ao final em um cliente com menos máquinas, conforme aceito pelo usuário.
 - [x] Não depende de fontes especiais; separador validado no terminal alvo.
 - [x] Não implementa recolhimento nem promete cabeçalhos com navegação independente.

@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.2.0 - 2026-10-11
+
+### Breaking changes
+
+- Replace Apply sidebar with explicit activation in Settings. Fresh installations
+  are enabled in Herdr with both modes inactive; users choose a profile matching
+  their Herdr sidebar order and set Active to Yes.
+- Make Restore defaults reset both profiles and activation to the factory snapshot.
+  Both Active controls set to No use Herdr's built-in native rows rather than an
+  earlier native-only customization. Disable/uninstall still restore owned settings.
+
+### Features
+
+- Add independent Grouped and Priority Settings tabs with saved views and four
+  colors per mode. Zero or one mode may be active; browsing tabs does not activate them.
+- Keep Grouped's machine/project tree with Agent or Agent / Tab views, and add a
+  Priority editor to show, hide and order native Status, Agent, Tab, Machine and
+  Project across two lines, with draft cancellation and empty-layout validation.
+- Add Dark blue for tabs. New factory profiles use Yellow/Blue/Purple/Dark blue,
+  Grouped's Agent view with separator Off, and Priority's Project above Status/Agent/Tab.
+- Preserve existing preferences and legacy pauses when migrating to schema 4,
+  without overwriting saved colors, views or activation during updates and reinstall.
+
+### Fixes
+
+- Keep Herdr's native agent ordering independent of presentation settings, retain
+  legacy ownership receipts and preserve unrelated edits when reapplying layouts.
+- Restore native Machine context after deactivation or factory reset, rejecting
+  foreign layouts and retaining recovery records if validation fails.
+- Preserve profiles and activation when restarting the worker, serialize user
+  operations with bounded locks, and keep paused modes inactive during navigation.
+- Keep both Priority line summaries visible without overlapping the settings footer.
+
+### Documentation and validation
+
+- Clarify post-install activation and native ordering, and add real default Grouped
+  and Priority captures side by side in the README with a repeatable capture command.
+- Extend unit and isolated Herdr checks for independent profiles, configurable
+  fields, native status and focus, factory resets, paused installs and durable upgrades.
+
 ## 0.1.0 - 2026-10-11
 
 ### Features

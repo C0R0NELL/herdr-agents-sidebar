@@ -1,17 +1,19 @@
 # Agents Sidebar
 
-A [Herdr](https://herdr.dev) plugin that groups native sidebar agents
-by machine and workspace, using indentation for projects and agents.
+A [Herdr](https://herdr.dev) plugin with grouped and priority layouts
+for the native agent sidebar.
 
 Machine and project headings stay attached to real agents, preserving native
-status and navigation. **Settings** lets you choose the three group colors,
-including **Default** (yellow machines, blue projects and purple names), and turn the `·`
-separator between machines on or off.
+status and navigation. **Settings** provides independent layouts and colors,
+including **Default** (yellow machines, blue projects, purple names and dark blue tabs), and turns the `·`
+separator between machines on or off. The separator starts **Off**.
 
 Requires Linux, Herdr 0.9.3+ and Python 3.11+ with curses.
 Runtime uses Python's standard library.
 
-![Native sidebar captured from two isolated Herdr servers](docs/evidence/native-sidebar.svg)
+| Grouped | Priority |
+| --- | --- |
+| ![Default Grouped layout with machine/project headings and separator Off](docs/evidence/default-grouped.svg) | ![Default Priority layout with project above status, agent and tab](docs/evidence/default-priority.svg) |
 
 Install from GitHub:
 
@@ -19,8 +21,20 @@ Install from GitHub:
 herdr plugin install C0R0NELL/herdr-agents-sidebar
 ```
 
-Choose **Apply sidebar** in the Plugin Manager to activate it in the current
-session. **Settings** changes colors and the machine separator live.
+After installation, open this plugin's **Settings** in the Plugin Manager.
+Choose the **Grouped** or **Priority** tab to match the order currently selected
+in Herdr's agent sidebar, then set **Active → Yes**. Both modes start inactive;
+activating one leaves the other inactive. Settings does not change Herdr's order.
+Set both to **No** to restore Herdr's default native layout, including machine
+labels, keeping both profiles saved.
+Grouped keeps the machine/project tree and offers **Agent** or **Agent / Tab**.
+Priority's **View** editor lets you arrange Status, Agent, Tab, Machine and Project
+across two lines, or hide fields. Each mode remembers its view and four colors.
+The Grouped tree requires Grouped order in Herdr. Priority rows work with either
+native order. Settings changes apply live;
+Show separator affects Grouped.
+**Restart sidebar** reloads the worker while keeping settings and activation.
+**Restore defaults** resets both profiles to the factory layout with both inactive.
 
 See [development](docs/development.md) for installation and durable settings,
 [verified behavior and limits](docs/viabilidade.md), and
