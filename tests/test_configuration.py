@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from configuration import Conflict, DEFAULT_ROWS, Presentation, Settings, Store
+from configuration import Conflict, DARK_BLUE, DEFAULT_ROWS, Presentation, Settings, Store
 
 CONFIG = '''# Keep user comments and commands.
 [keys]
@@ -183,13 +183,43 @@ class ConfigurationTests(unittest.TestCase):
         self.assertFalse(factory.enabled)
         self.assertEqual(factory.grouped.view, "agent")
         self.assertFalse(factory.grouped.show_separator)
-        self.assertEqual(factory.priority.line1, ("project",))
-        self.assertEqual(factory.priority.line2, ("status", "agent", "tab"))
+        self.assertEqual(factory.priority.line1, ("project", "machine"))
+        self.assertEqual(factory.priority.line2, ("status", "agent"))
         for mode in ("grouped", "priority"):
             profile = factory.profile(mode)
             for name in ("machine_color", "project_color", "agent_color", "tab_color"):
-                self.assertEqual(getattr(profile, name), "default")
+                expected = DARK_BLUE if mode == "priority" and name == "machine_color" else "default"
+                self.assertEqual(getattr(profile, name), expected)
         self.assertFalse(store.preferences.exists(), "Reading defaults must not write user state")
+
+    def test_installations_have_durable_independent_metadata_keys(self):
+        first = Store(self.root / "first/config", self.root / "first/state")
+        second = Store(self.root / "second/config", self.root / "second/state")
+        first_keys, second_keys = first.token_names(), second.token_names()
+        self.assertTrue(set(first_keys.values()).isdisjoint(second_keys.values()))
+        self.assertEqual(set(first_keys), {"has_machine", "has_project", "has_agent_prefix", "has_agent", "has_gap"})
+        import re
+        for name in first_keys.values():
+            self.assertIsNotNone(re.fullmatch(r"[A-Za-z0-9_-]{1,32}", name))
+        preferences = Settings().with_active("priority")
+        first.save(preferences)
+        reopened = Store(first.config, first.state)
+        self.assertEqual(reopened.token_names(), first_keys)
+        self.assertEqual(reopened.load(), preferences)
+        self.assertEqual((first.state / "instance.json").stat().st_mode & 0o777, 0o600)
+        self.assertEqual((first.state.stat().st_mode & 0o777), 0o700)
+        self.assertEqual(preferences.rows(token_names=first_keys)[0][0]["token"], "$" + first_keys["has_project"])
+
+    def test_unknown_or_invalid_installation_identity_is_never_replaced(self):
+        store = Store(self.root / "preferences", self.root / "state")
+        store.state.mkdir()
+        identity = store.state / "instance.json"
+        for content in ('{"schema": 2, "id": "future"}', '{"schema": 1, "id": "broken"}', '{broken'):
+            with self.subTest(content=content):
+                identity.write_text(content)
+                with self.assertRaises(Conflict):
+                    store.token_names()
+                self.assertEqual(identity.read_text(), content)
 
     def test_invalid_settings_do_not_replace_existing_preferences(self):
         store=Store(self.root/"preferences",self.root/"state")

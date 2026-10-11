@@ -71,6 +71,7 @@ def main():
             preferences = preferences.with_profile("priority", line1=("machine", "project"),
                                                    line2=("agent", "tab", "status"), tab_color="#ff79c6")
             store.save(preferences)
+            original_names = store.token_names()
             h.command("local", "plugin", "install", "c0r0nell/herdr-agents-sidebar", "--yes")
             info = next(p for p in h.api("local", "plugin.list")["plugins"] if p["plugin_id"] == PLUGIN_ID)
             checkout = Path(info["plugin_root"])
@@ -96,6 +97,7 @@ def main():
                 h.command("local", "plugin", "install", "c0r0nell/herdr-agents-sidebar", "--yes")
                 info = next(p for p in h.api("local", "plugin.list")["plugins"] if p["plugin_id"] == PLUGIN_ID)
                 assert info["version"] == updated_version
+                assert store.token_names() == original_names, "Upgrade replaced the installation identity"
                 assert store.load() == preferences
                 assert (store.state / "presentation.json").exists()
                 assert not any((checkout / name).exists() for name in ("settings.toml", "presentation.json"))
@@ -105,6 +107,7 @@ def main():
                 assert h.config_path("local").read_text() == original
                 assert not checkout.exists(), "Uninstall retained the managed source checkout"
                 assert store.load() == preferences, "Uninstall removed durable preferences"
+                assert store.token_names() == original_names, "Uninstall removed the installation identity"
                 # The same official identity consumes the same preferences locally.
                 h.command("local", "plugin", "link", str(source / "herdr-plugin.toml"), "--enabled")
                 activate_by_navigation(h)
@@ -121,8 +124,11 @@ def main():
                 h.command("local", "plugin", "install", "c0r0nell/herdr-agents-sidebar", "--yes")
                 assert not (store.state / "presentation.json").exists()
                 h.start("local", rows="")
-                wait(lambda: (store.state / "presentation.json").exists() and not worker_stopped(store.state))
-                assert tomllib.loads(h.config_path("local").read_text())["ui"]["sidebar"]["agents"]["rows"] == preferences.rows()
+                expected_rows = preferences.rows(token_names=store.token_names())
+                wait(lambda: (store.state / "presentation.json").exists() and not worker_stopped(store.state)
+                     and tomllib.loads(h.config_path("local").read_text()).get("ui", {}).get("sidebar", {})
+                         .get("agents", {}).get("rows") == expected_rows)
+                assert tomllib.loads(h.config_path("local").read_text())["ui"]["sidebar"]["agents"]["rows"] == preferences.rows(token_names=store.token_names())
                 assert store.load() == preferences
                 logs = h.api("local", "plugin.log.list", {"plugin_id": PLUGIN_ID, "limit": 20})["logs"]
                 assert any(log.get("event") == "startup" for log in logs), "Navigation masked a missing startup hook"
@@ -146,6 +152,7 @@ def main():
                 assert worker_stopped(store.state) and h.config_path("local").read_text() == original
                 h.command("local", "plugin", "uninstall", PLUGIN_ID)
                 assert store.load() == paused, "Reinstall/uninstall lost the inactive profiles"
+                assert store.token_names() == original_names, "Reinstall changed the installation identity"
             finally:
                 h.command("local", "plugin", "disable", PLUGIN_ID, check=False)
                 wait(lambda: worker_stopped(store.state), timeout=25)

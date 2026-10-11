@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
+import base64
 import fcntl
 import json
 import os
@@ -10,8 +11,9 @@ import re
 import tempfile
 import time
 import tomllib
+import uuid
 
-from layout import DEFAULT_PRIORITY_LINES, GROUPED_VIEWS, MODES, SIDEBAR_FIELDS
+from layout import DEFAULT_PRIORITY_LINES, GROUPED_VIEWS, MODES, SIDEBAR_FIELDS, TOKENS
 
 PLUGIN_ID = "c0r0nell.agents-sidebar"
 SOURCE = "plugin:" + PLUGIN_ID
@@ -26,8 +28,8 @@ DRACULA_COLORS = {
 DARK_BLUE = "#6272a4"
 DEFAULT_COLORS = (DRACULA_COLORS["Yellow"], "#89b4fa", DRACULA_COLORS["Purple"], DARK_BLUE)
 # Factory snapshot approved on 2026-10-11: fixed Grouped tree, no separator;
-# Priority shows Project above the native Status, Agent and Tab.
-FACTORY_PRIORITY_LINES = (("project",), ("status", "agent", "tab"))
+# Priority shows Project/Machine above native Status/Agent, with Dark blue machines.
+FACTORY_PRIORITY_LINES = (("project", "machine"), ("status", "agent"))
 LEGACY_VIEWS = ("agent", "agent/project", "agent/project/machine", "agent/project/machine/tab")
 PROFILE_FIELDS = {
     "grouped": {"machine_color", "project_color", "agent_color", "tab_color", "view", "show_separator"},
@@ -86,7 +88,7 @@ class Settings:
     enabled: bool = False
     grouped: ModeSettings = field(default_factory=ModeSettings)
     priority: ModeSettings = field(default_factory=lambda: ModeSettings(
-        line1=FACTORY_PRIORITY_LINES[0], line2=FACTORY_PRIORITY_LINES[1]))
+        machine_color=DARK_BLUE, line1=FACTORY_PRIORITY_LINES[0], line2=FACTORY_PRIORITY_LINES[1]))
 
     def profile(self, mode=None):
         mode = self.mode if mode is None else mode
@@ -126,14 +128,15 @@ class Settings:
             raise ValueError("Each mode must have its own settings profile")
         return replace(self, grouped=self.grouped.normalized(), priority=self.priority.normalized())
 
-    def rows(self):
+    def rows(self, *, token_names=None):
         if not self.enabled:
             raise ValueError("Both modes are inactive; restore the native sidebar")
         profile = self.profile()
         colors = [fallback if value == "default" else value for value, fallback in
                   zip((profile.machine_color, profile.project_color, profile.agent_color, profile.tab_color), DEFAULT_COLORS)]
+        names = dict(zip(TOKENS, TOKENS)) if token_names is None else token_names
         def token(name, index, bold):
-            return {"token": "$" + name, "fg": colors[index], "bold": bold}
+            return {"token": "$" + names[name], "fg": colors[index], "bold": bold}
         if self.mode == "priority":
             tokens = {"status": "state_icon", "agent": token("has_agent", 2, False),
                       "tab": {"token": "tab", "fg": colors[3], "bold": False},
@@ -191,7 +194,7 @@ def atomic_write(path, text, *, mode=0o600):
 
 
 @contextmanager
-def lock(path, timeout=3):
+def lock(path, timeout=3, *, skip_busy=False):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with open(path, "a", encoding="utf-8") as stream:
         os.chmod(path, 0o600)
@@ -202,10 +205,13 @@ def lock(path, timeout=3):
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
+                    if skip_busy:
+                        yield False
+                        return
                     raise Conflict("Another sidebar operation is running; try again") from None
                 time.sleep(.05)
         try:
-            yield
+            yield True
         finally:
             fcntl.flock(stream, fcntl.LOCK_UN)
 
@@ -222,6 +228,29 @@ class Store:
         if not self.config.is_absolute() or not self.state.is_absolute():
             raise ValueError("Plugin storage paths must be absolute")
         self.preferences = self.config / "settings.toml"
+
+    def token_names(self):
+        """Keep server-global metadata keys independent for each installation."""
+        private_directory(self.state)
+        identity = self.state / "instance.json"
+        with lock(self.state / "instance.lock"):
+            if identity.exists():
+                try:
+                    data = json.loads(identity.read_text())
+                    if (not isinstance(data, dict) or set(data) != {"schema", "id"}
+                            or type(data["schema"]) is not int or data["schema"] != 1
+                            or not isinstance(data["id"], str)):
+                        raise ValueError("Unsupported installation identity")
+                    identifier = uuid.UUID(hex=data["id"])
+                    if identifier.hex != data["id"]:
+                        raise ValueError("Invalid installation identity")
+                except (ValueError, TypeError, AttributeError) as error:
+                    raise Conflict("Invalid installation identity; existing state was preserved") from error
+            else:
+                identifier = uuid.uuid4()
+                atomic_write(identity, json.dumps({"schema": 1, "id": identifier.hex}))
+        compact = base64.urlsafe_b64encode(identifier.bytes).decode().rstrip("=")
+        return {name: f"has_{compact}_{suffix}" for name, suffix in zip(TOKENS, ("m", "p", "i", "a", "g"))}
 
     def load(self):
         if not self.preferences.exists():
@@ -392,10 +421,11 @@ def rewrite(text, path, value=None, *, raw=None, remove=False):
 
 
 class Presentation:
-    def __init__(self, config, state):
+    def __init__(self, config, state, *, token_names=None):
         self.config = Path(config).resolve()
         self.state = Path(state)
         self.receipt = self.state / "presentation.json"
+        self.token_names = token_names
 
     def _read(self):
         return self.config.read_text() if self.config.exists() else ""
@@ -472,7 +502,7 @@ class Presentation:
                                                     (replace_native_layout and native_only)):
                     raise Conflict("A custom agent layout already exists; no configuration was changed")
             text = original
-            values = (0, settings.rows())
+            values = (0, settings.rows(token_names=self.token_names))
             for name, value in zip(FIELDS, values):
                 text = rewrite(text, name, value)
             try:

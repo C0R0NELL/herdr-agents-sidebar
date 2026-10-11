@@ -47,6 +47,7 @@ Default paths are:
 ```text
 ~/.config/herdr/plugins/config/c0r0nell.agents-sidebar/settings.toml
 ~/.local/state/herdr/plugins/c0r0nell.agents-sidebar/presentation.json
+~/.local/state/herdr/plugins/c0r0nell.agents-sidebar/instance.json
 ```
 
 Settings use schema 4 and private atomic writes. Schemas 1, 2 and 3 remain readable
@@ -61,24 +62,34 @@ When neither mode is active, the selected profile is remembered for reopening
 Settings. Legacy `control.json` pause records are read during migration; schema 4
 is authoritative afterward, so old runtime flags cannot override new settings.
 State contains config ownership,
-bounded worker locks and small error records, without persisted agent snapshots
+an installation UUID, bounded worker locks and small error records, without persisted agent snapshots
 or transcripts. The ownership receipt includes the original Herdr configuration
 for restoration, including any private values already in that configuration.
 Directories use owner-only permissions (0700), and files use 0600. The plugin
 does not read agent credentials. Updates and source removal preserve these directories.
 
+The installation UUID names this viewer's five metadata keys, so another installation
+on a connected machine cannot replace or clear them. The official plugin ID and
+metadata source remain stable. Logical layout fields remain `has_machine`,
+`has_project`, `has_agent_prefix`, `has_agent` and `has_gap`; actual server keys
+include a compact UUID. Keep `instance.json` through reinstall and source updates.
+Malformed identities are rejected rather than regenerated. Settings saves and
+worker configuration refresh share a lock; the worker skips busy refreshes while
+still checking for pause/disable, avoiding a cleanup deadlock.
+
 The factory snapshot is defined by Settings in configuration.py. It follows the
 user-approved profiles captured on 2026-10-11: Grouped's fixed tree with View Agent
-and Show separator Off; Priority has Project on line 1 and Status/Agent/Tab on
-line 2. Both profiles use default Yellow/Blue/Purple/Dark blue colors. Both modes
+and Show separator Off; Priority has Project/Machine on line 1 and Status/Agent on
+line 2, with its Machine color set to Dark blue. Other colors retain the default
+Yellow/Blue/Purple/Dark blue palette. Both modes
 are inactive. Factory reset uses the same defaults as a new installation;
 existing saves, including old active modes, are not reset by upgrades.
 User operations serialize under a bounded operation lock; workers have their own
 lock so cleanup can finish before reactivation without competing config writes.
 Existing saved choices, including Show separator On,
 are preserved. Settings without a `mode` field load as Grouped. Priority uses two
-native rows per agent: project above, native status, agent and tab below.
-Its default hides machine labels and gaps; identities remain scoped by machine.
+native rows per agent: project and machine above, native status and agent below.
+Its factory view hides Tab and gaps; identities remain scoped by machine.
 Settings has Grouped and Priority tabs, each with Active, View and four colors.
 Left/right or Tab changes the inspected profile without activating it. Active
 allows zero or one active profile: Yes deactivates the other profile, and No on
@@ -89,6 +100,8 @@ inactive profiles does not activate them or change the live rows.
 Show separator appears only in Grouped.
 Grouped View selects Agent or Agent / Tab; machine/project headings remain fixed.
 Priority View opens a draft editor for Status, Agent, Tab, Machine and Project.
+Line summaries appear only inside Edit lines. Save view sits above the footer
+with two blank rows separating the action from the instructions.
 Enter cycles a field through Hidden, Line 1, Line 2 and Hidden; left/right reorders
 it within its assigned line. Save view applies the draft; Escape discards it.
 Each field appears at most once, at least one field must remain, and empty lines

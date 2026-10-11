@@ -57,8 +57,8 @@ def priority_view_ui(screen, profile):
         for index, name in enumerate(SIDEBAR_FIELDS):
             location = next((i for i, line in enumerate(lines) if name in line), None)
             text = "Hidden" if location is None else f"Line {location+1} | position {lines[location].index(name)+1}"
-            write(screen, index+6, 2, f"  {name.title():<12} {text}", curses.A_REVERSE if selected == index else 0)
-        write(screen, 12, 2, "  Save view", curses.A_REVERSE if selected == len(SIDEBAR_FIELDS) else 0)
+            write(screen, index+5, 2, f"  {name.title():<12} {text}", curses.A_REVERSE if selected == index else 0)
+        write(screen, 10, 2, "  Save view", curses.A_REVERSE if selected == len(SIDEBAR_FIELDS) else 0)
         write(screen, height-3, 2, message or "Enter cycles Hidden -> Line 1 -> Line 2 -> Hidden")
         write(screen, height-2, 2, "left/right reorder | up/down select | esc cancel")
         screen.refresh()
@@ -132,9 +132,6 @@ def settings_ui(herdr, store):
                         "Edit lines" if field == "view" and tab == "priority" else display(getattr(profile, field)))
                     text = f"  {name:<19} [{value}]"
                     write(screen, index + 5, 2, text, curses.A_REVERSE if selected == index else 0)
-                if tab == "priority":
-                    write(screen, 11, 2, "Line 1  [" + line_text(profile.line1) + "]")
-                    write(screen, 12, 2, "Line 2  [" + line_text(profile.line2) + "]")
             field = fields[selected][1]
             hint = {"active": "Both No restores the native sidebar" if settings.enabled else "Set Active to Yes to use this layout",
                     "view": "Changes belong only to this tab"}.get(field, "") if not choosing else ""
@@ -203,7 +200,8 @@ def main():
         print("Agents Sidebar source check passed (Python 3.11+)")
         return
     from runtime import Herdr, apply, ensure, restore, restart, worker
-    herdr, store = Herdr(), Store()
+    store = Store()
+    herdr = Herdr(store)
     if args.command == "settings":
         settings_ui(herdr, store)
     elif args.command == "settings-open":

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.1 - 2026-10-11
+
+### Fixes
+
+- Prevent flickering machine/project headings when multiple active installations
+  share a connected Herdr server. Scope metadata keys with a durable installation
+  UUID, preserving each installation's layout and restricting cleanup to its own keys.
+- Serialize worker refreshes with Settings saves so an interrupted save cannot
+  reapply an outdated layout; keep pause and cleanup responsive while a save is busy.
+- Show Priority line summaries only inside Edit lines and move Save view away
+  from the footer instructions.
+
+### Defaults
+
+- Update the factory Priority profile to Project/Machine on line 1 and Status/Agent
+  on line 2, with Dark blue machines. Grouped keeps Agent view, default colors and
+  separator Off. Fresh installations and Restore defaults keep both modes inactive;
+  updates preserve existing saved profiles and activation.
+
+### Documentation and validation
+
+- Verify independent layouts and cleanup with two real connected installations,
+  remote Settings interaction, concurrent saves and durable UUIDs through upgrades
+  and reinstall. Keep the capture tool aligned with the new factory profiles.
+- Document installation isolation and connectivity diagnostics, and remove approval
+  history and duplicated guidance from AGENTS.md while retaining technical safeguards.
+
 ## 0.2.0 - 2026-10-11
 
 ### Breaking changes

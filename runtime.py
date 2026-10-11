@@ -31,7 +31,7 @@ EVENTS = ("workspace.created", "workspace.updated", "workspace.renamed", "worksp
 
 
 class Herdr:
-    def __init__(self):
+    def __init__(self, store=None):
         if os.environ.get("HERDR_ENV") != "1":
             raise RuntimeError("Run this plugin inside Herdr")
         matching = os.environ.get("HERDR_PLUGIN_ID") == PLUGIN_ID
@@ -44,6 +44,7 @@ class Herdr:
         session_root = root if self.session == "default" else root / "sessions" / self.session
         self.socket = Path(os.environ.get("HERDR_SOCKET_PATH", session_root / "herdr.sock"))
         self.local_id = "local:" + hashlib.sha256(str(self.socket.resolve()).encode()).hexdigest()[:16]
+        self.token_names = (store or Store()).token_names()
 
     def api(self, method, params=None):
         with socket.socket(socket.AF_UNIX) as connection:
@@ -113,17 +114,27 @@ class Herdr:
     def snapshot(self, profile=None):
         if profile is None:
             data = self.api("session.snapshot")["snapshot"]
-            return Machine(self.local_id, self.session, "Local", data)
-        response = json.loads(self.command("--machine", profile["id"], "api", "snapshot"))
-        return Machine(profile["id"], profile["session"], profile["label"], response["result"]["snapshot"])
+            identity, session, label = self.local_id, self.session, "Local"
+        else:
+            response = json.loads(self.command("--machine", profile["id"], "api", "snapshot"))
+            data = response["result"]["snapshot"]
+            identity, session, label = profile["id"], profile["session"], profile["label"]
+        # Read only this installation's logical presentation. Keep native identity/state.
+        data = dict(data)
+        for collection in ("panes", "agents"):
+            data[collection] = [dict(item, tokens={name: value for name, wire in self.token_names.items()
+                                                   if (value := (item.get("tokens") or {}).get(wire)) is not None})
+                                for item in data.get(collection, [])]
+        return Machine(identity, session, label, data)
 
     def publish(self, patch):
+        tokens = {self.token_names[name]: value for name, value in patch.tokens.items()}
         if patch.key.machine == self.local_id:
             return self.api("pane.report_metadata", {"pane_id": patch.key.pane_id, "source": SOURCE,
-                                                     "tokens": patch.tokens, "ttl_ms": TTL_MS})
+                                                     "tokens": tokens, "ttl_ms": TTL_MS})
         args = ["--machine", patch.key.machine, "pane", "report-metadata", patch.key.pane_id,
                 "--source", SOURCE, "--ttl-ms", str(TTL_MS)]
-        for name, value in patch.tokens.items():
+        for name, value in tokens.items():
             args += ["--clear-token", name] if value is None else ["--token", name + "=" + value]
         return self.command(*args)
 
@@ -271,7 +282,7 @@ class Reconciler:
 
 
 def presentation(herdr, store):
-    return Presentation(herdr.config, store.state)
+    return Presentation(herdr.config, store.state, token_names=store.token_names())
 
 
 def active(store):
@@ -359,37 +370,41 @@ def worker(herdr, store):
             restore = False
             failed = False
             try:
-                if not herdr.enabled() or not active(store):
-                    return
-                herdr.check_projection()
-                settings = store.load()
-                if presentation(herdr, store).apply(settings, validate=herdr.validate, replace_native_layout=True):
-                    herdr.reload()
-                config_stamp = herdr.config.stat().st_mtime_ns
+                settings, config_stamp = None, None
                 next_tick, failures = 0, 0
                 while not stopped:
                     try:
                         if not herdr.enabled() or not active(store):
                             restore = True
                             break
-                        if events is None:
-                            events = Events(herdr)  # Subscribe before the initial snapshot.
-                        dirty = events.dirty()
-                        current = store.load()
-                        now = time.monotonic()
-                        if dirty or current != settings or now >= next_tick:
-                            herdr.check_projection()
-                            stamp = herdr.config.stat().st_mtime_ns
-                            if stamp != config_stamp:
-                                if presentation(herdr, store).apply(current, validate=herdr.validate):
-                                    herdr.reload()
-                                config_stamp = herdr.config.stat().st_mtime_ns
-                            settings = current
-                            engine.tick(settings)
-                            next_tick = now + 1
-                        failures = 0
-                        if status.exists():
-                            status.unlink()
+                        # Settings saves publish config and preferences under this
+                        # same lock. Never wait here: No/Restart may hold it while
+                        # waiting for this worker's own lock and cleanup.
+                        with lock(store.state / "operation.lock", timeout=0, skip_busy=True) as acquired:
+                            if acquired:
+                                if events is None:
+                                    events = Events(herdr)  # Subscribe before the initial snapshot.
+                                dirty = events.dirty()
+                                current = store.load()
+                                if not current.enabled:
+                                    restore = True
+                                    break
+                                now = time.monotonic()
+                                if dirty or current != settings or now >= next_tick:
+                                    herdr.check_projection()
+                                    stamp = herdr.config.stat().st_mtime_ns
+                                    if settings is None or stamp != config_stamp:
+                                        if presentation(herdr, store).apply(
+                                                current, validate=herdr.validate,
+                                                replace_native_layout=settings is None):
+                                            herdr.reload()
+                                        config_stamp = herdr.config.stat().st_mtime_ns
+                                    settings = current
+                                    engine.tick(settings)
+                                    next_tick = now + 1
+                                failures = 0
+                                if status.exists():
+                                    status.unlink()
                     except Conflict as error:
                         restore, failed = True, True
                         atomic_write(status, json.dumps({"schema": 1, "error": str(error)[:200]}))

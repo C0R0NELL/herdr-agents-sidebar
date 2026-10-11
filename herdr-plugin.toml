@@ -1,7 +1,7 @@
 # Keep this identity unchanged for local links and managed GitHub installs.
 id = "c0r0nell.agents-sidebar"
 name = "Agents Sidebar"
-version = "0.2.0"
+version = "0.2.1"
 min_herdr_version = "0.9.3"
 description = "Grouped and priority layouts for Herdr's native agent sidebar."
 platforms = ["linux"]

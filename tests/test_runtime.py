@@ -1,15 +1,20 @@
 """Check event subscription acceptance and framing without a live server."""
 
 import json
+import os
 from pathlib import Path
+import signal
 import tempfile
+import threading
+import time
 import tomllib
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 from configuration import DEFAULT_ROWS, Presentation, Settings, Store
-from runtime import Events, ensure, restore, restart, save_settings
+from layout import AgentKey, Patch
+from runtime import Events, Herdr, ensure, restore, restart, save_settings, worker
 
 
 def frame(value):
@@ -127,11 +132,93 @@ class ActivationLifecycle(unittest.TestCase):
             restart(self.herdr, self.store)
         self.assertEqual(self.store.load(), custom)
         self.assertTrue(self.store.load().enabled)
-        self.assertEqual(tomllib.loads(self.config.read_text())["ui"]["sidebar"]["agents"]["rows"], custom.rows())
+        self.assertEqual(tomllib.loads(self.config.read_text())["ui"]["sidebar"]["agents"]["rows"], custom.rows(token_names=self.store.token_names()))
         # Registry disable/uninstall must still recover the pre-plugin layout.
         Presentation(self.config, self.store.state).restore()
         self.assertEqual(self.config.read_text(), self.original)
         spawn.assert_called_once()
+
+    def test_settings_save_cannot_be_reverted_by_a_worker_between_config_and_preferences(self):
+        previous = Settings().with_active("grouped")
+        proposed = previous.with_active("priority")
+        self.store.save(previous)
+        names = self.store.token_names()
+        Presentation(self.config, self.store.state, token_names=names).apply(previous, replace_native_layout=True)
+        ready, saving, progressed, applied = (threading.Event() for _ in range(4))
+        sleeps, handlers, errors = [], {}, []
+        real_sleep, real_save = time.sleep, self.store.save
+
+        def tick(settings):
+            ready.set()
+            if settings == proposed:
+                applied.set()
+
+        def sleep(_):
+            if threading.current_thread().name == "sidebar-test-worker" and saving.is_set():
+                sleeps.append(True)
+                if len(sleeps) >= 2:
+                    progressed.set()
+            real_sleep(.01)
+
+        def save(settings):
+            # Reproduce the real gap after Herdr config changed but before preferences save.
+            saving.set()
+            if not progressed.wait(2):
+                raise AssertionError("Worker did not progress during the interrupted settings save")
+            real_save(settings)
+
+        def run():
+            try:
+                worker(self.herdr, self.store)
+            except BaseException as error:
+                errors.append(error)
+
+        with patch("runtime.signal.signal", side_effect=lambda sig, handler: handlers.update({sig: handler})), \
+                patch("runtime.Events") as events, patch("runtime.Reconciler") as engine, \
+                patch("runtime.time.sleep", side_effect=sleep), patch("runtime.subprocess.Popen"):
+            events.return_value.dirty.return_value = True
+            engine.return_value.tick.side_effect = tick
+            thread = threading.Thread(target=run, name="sidebar-test-worker")
+            thread.start()
+            try:
+                self.assertTrue(ready.wait(2), "Worker never reached the initial live profile")
+                with patch.object(self.store, "save", side_effect=save):
+                    save_settings(self.herdr, self.store, proposed)
+                self.assertTrue(applied.wait(2), "Worker never observed the saved profile")
+                self.assertEqual(self.store.load(), proposed)
+                rows = tomllib.loads(self.config.read_text())["ui"]["sidebar"]["agents"]["rows"]
+                self.assertEqual(rows, proposed.rows(token_names=names))
+            finally:
+                if signal.SIGTERM in handlers:
+                    handlers[signal.SIGTERM]()
+                thread.join(3)
+                self.assertFalse(thread.is_alive(), "Test worker retained its lock")
+            self.assertEqual(errors, [])
+
+    def test_snapshot_and_clear_are_restricted_to_the_installations_wire_keys(self):
+        peer = Store(self.store.config.parent / "peer-config", self.store.state.parent / "peer-state")
+        own_names, peer_names = self.store.token_names(), peer.token_names()
+        raw_tokens = {own_names["has_machine"]: "Local", peer_names["has_machine"]: "peer",
+                      "has_machine": "legacy", "foreign": "preserved"}
+        native = {"workspace_id": "w1", "pane_id": "w1:p1", "agent": "codex", "state": "working",
+                  "tokens": raw_tokens}
+        raw = {"panes": [dict(native)], "agents": [dict(native)]}
+        original = json.loads(json.dumps(raw))
+        with patch.dict(os.environ, {"HERDR_ENV": "1", "HERDR_CONFIG_PATH": str(self.config),
+                                     "HERDR_SOCKET_PATH": str(self.config.parent / "test.sock")}), \
+                patch("runtime.shutil.which", return_value="/unused/herdr"):
+            herdr = Herdr(self.store)
+        herdr.api = Mock(return_value={"snapshot": raw})
+        snapshot = herdr.snapshot()
+        agent = snapshot.snapshot["agents"][0]
+        self.assertEqual(agent["tokens"], {"has_machine": "Local"})
+        self.assertEqual(agent["state"], "working")
+        self.assertEqual(agent["pane_id"], "w1:p1")
+        self.assertEqual(raw, original, "Decoding mutated an authoritative snapshot")
+        herdr.publish(Patch(AgentKey(herdr.local_id, herdr.session, "w1", "w1:p1"), {"has_machine": None}))
+        method, params = herdr.api.call_args.args
+        self.assertEqual(method, "pane.report_metadata")
+        self.assertEqual(params["tokens"], {own_names["has_machine"]: None})
 
 
 if __name__ == "__main__":

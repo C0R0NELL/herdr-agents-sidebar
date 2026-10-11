@@ -10,7 +10,7 @@ import tomllib
 
 from check_herdr import ROOT, popup_open, tokens, wait, worker_stopped
 from check_visual import capture_svg, sidebar_lines
-from configuration import DEFAULT_COLORS, PLUGIN_ID, Settings, Store
+from configuration import DARK_BLUE, DEFAULT_COLORS, PLUGIN_ID, Settings, Store
 from herdr_harness import HerdrHarness
 
 
@@ -46,8 +46,7 @@ def capture(output):
                 terminal.wait(popup_open)
                 if mode == "priority":
                     os.write(terminal.master, b"\x1bOC")
-                    terminal.wait(lambda lines: any("Line 1  [Project]" in line for line in lines)
-                                  and any("Line 2  [Status | Agent | Tab]" in line for line in lines))
+                    terminal.wait(lambda lines: any("View" in line and "[Edit lines]" in line for line in lines))
                 os.write(terminal.master, b"\r")
                 wait(lambda: store.load() == Settings().with_active(mode))
                 wait(lambda: all(t.get("has_agent") for machine in ("local", "remote") for t in tokens(h, machine)))
@@ -63,7 +62,8 @@ def capture(output):
                                 and sum("machine02" in text for _, text in rows) == 1)
                     # Wait for remote reconciliation and the client redraw too;
                     # the old layout can briefly contain the same six agent names.
-                    return all("tab0" in text and lines[y-1][:width].strip().startswith("project")
+                    return all("tab0" not in text and lines[y-1][:width].strip().startswith("project")
+                               and ("Local" in lines[y-1][:width] or "machine02" in lines[y-1][:width])
                                for y, text in entries)
                 lines = terminal.wait(rendered)
                 if mode == "priority":
@@ -71,7 +71,7 @@ def capture(output):
                     terminal.click(lines[heading].index("grouped") + 1, heading)
                     lines = terminal.wait(lambda lines: "priority" in lines[heading] and rendered(lines))
                 settings = store.load()
-                assert tomllib.loads(config.read_text())["ui"]["sidebar"]["agents"]["rows"] == settings.rows()
+                assert tomllib.loads(config.read_text())["ui"]["sidebar"]["agents"]["rows"] == settings.rows(token_names=store.token_names())
                 rows = [(y, text) for y, text in sidebar_lines(lines, width) if text.strip()]
                 assert len(rows) == 12, rows
                 assert not any(text.strip() == "·" for _, text in rows)
@@ -81,9 +81,11 @@ def capture(output):
                     if "agent0" in text:
                         assert terminal.screen.buffer[y][text.index("agent0")].fg == DEFAULT_COLORS[2][1:]
                         if mode == "priority":
-                            assert "project" in lines[y-1][:width] and "tab0" in text
+                            assert "project" in lines[y-1][:width] and "tab0" not in text
                             assert "Local" not in text and "machine02" not in text
-                            assert terminal.screen.buffer[y][text.index("tab0")].fg == DEFAULT_COLORS[3][1:]
+                    if mode == "priority" and ("Local" in text or "machine02" in text):
+                        machine_name = "Local" if "Local" in text else "machine02"
+                        assert terminal.screen.buffer[y][text.index(machine_name)].fg == DARK_BLUE[1:]
                     if mode == "grouped" and ("Local" in text or "machine02" in text):
                         assert terminal.screen.buffer[y][1].fg == DEFAULT_COLORS[0][1:]
                 stem = output / f"default-{mode}"

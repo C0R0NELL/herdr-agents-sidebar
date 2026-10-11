@@ -35,6 +35,9 @@ activates the chosen mode, accepting reversible native-only rows. Restart preser
 active and inactive choices. Restore defaults resets both customized profiles to
 the factory snapshot with both inactive. Offline installer checks verify startup
 respects saved activation, applying active layouts before further navigation.
+The latest factory snapshot uses Project/Machine above Status/Agent in Priority,
+with Dark blue machines; its actual activation and Restore checks passed after
+the user's snapshot update. The earlier README images remain unchanged by request.
 Herdr 0.9.3 has no synchronous post-install hook; saved active modes start at
 startup or the next matching native event.
 See [the activation investigation](solutions/automatic-activation.md).
@@ -120,6 +123,15 @@ ordered lines; Grouped retains optional Tab with the requested fixed tree.
 Ambiguous formats are rejected before writing. Managed install/update/uninstall
 and local link/unlink preserve external preferences. An actual offline reinstall
 and startup kept both No, with no worker or presentation receipt created.
+
+On 2026-10-11, a two-installation regression reproduced global token conflicts
+between an active Grouped machine and a Priority viewer. Installation-scoped keys
+now keep both real sidebars stable while remote Settings is opened and edited from
+the connected viewer. Disabling the viewer clears only its own keys. The real
+installer preserves the private installation UUID across upgrades and reinstall.
+A deterministic unit worker regression also reproduced and fixed rollback of new
+rows during the config/preference save gap. Details are in
+[independent installations](solutions/independent-installations.md).
 
 ## Limits
 

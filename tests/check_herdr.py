@@ -16,7 +16,8 @@ from configuration import Conflict, PLUGIN_ID, Settings, Store
 from runtime import Events, Herdr
 from herdr_harness import HerdrHarness
 from check_visual import capture_svg, check as visual_check, sidebar_lines
-from layout import GROUPED_VIEWS
+from layout import GROUPED_VIEWS, TOKENS
+from sidebar import OPTIONS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,8 +31,14 @@ def wait(predicate, timeout=15):
     raise AssertionError("Isolated integration condition timed out")
 
 
-def tokens(h, machine):
-    return [a.get("tokens", {}) for a in h.api(machine, "session.snapshot")["snapshot"]["agents"]]
+def tokens(h, machine, *, origin="local"):
+    store = Store(h.root / origin / "config/herdr/plugins/config" / PLUGIN_ID,
+                  h.root / origin / "state/herdr/plugins" / PLUGIN_ID)
+    names = store.token_names()
+    return [{**{name: value for name, value in raw.items() if name not in TOKENS},
+             **{name: raw[wire] for name, wire in names.items() if wire in raw}}
+            for a in h.api(machine, "session.snapshot")["snapshot"]["agents"]
+            for raw in [a.get("tokens") or {}]]
 
 
 def popup_open(lines):
@@ -91,22 +98,35 @@ def check_activation():
             h.api("local", "plugin.pane.open", {"plugin_id": PLUGIN_ID, "entrypoint": "settings", "focus": True})
             terminal.wait(lambda lines: popup_open(lines) and any("Active" in line and "[No]" in line for line in lines))
             os.write(terminal.master, b"\x1bOC")
-            terminal.wait(lambda lines: any("Active" in line and "[No]" in line for line in lines)
-                          and any("Line 1  [Project]" in line for line in lines)
-                          and any("Line 2  [Status | Agent | Tab]" in line for line in lines))
+            lines = terminal.wait(lambda lines: any("Active" in line and "[No]" in line for line in lines)
+                                  and any("View" in line and "[Edit lines]" in line for line in lines))
+            assert not any("Line 1  [" in line or "Line 2  [" in line for line in lines), "Line settings appeared before opening Edit lines"
+            os.write(terminal.master, b"\x1bOB\r")
+            lines = terminal.wait(lambda lines: any("Priority view" in line for line in lines))
+            assert any("Line 1  [Project | Machine]" in line for line in lines)
+            assert any("Line 2  [Status | Agent]" in line for line in lines)
+            save_row = next(y for y, line in enumerate(lines) if "Save view" in line)
+            hint_row = next(y for y, line in enumerate(lines) if "Enter cycles" in line)
+            assert hint_row - save_row >= 3, "Save view is crowded against the instructions"
+            os.write(terminal.master, b"\x1b")
+            lines = terminal.wait(popup_open)
+            assert not any("Line 1  [" in line or "Line 2  [" in line for line in lines)
+            assert store.load() == Settings() and config.read_bytes() == original
             # User activates Priority from Settings; verify the captured factory view.
-            os.write(terminal.master, b"\r")
+            os.write(terminal.master, b"\x1bOA\r")
             wait(lambda: store.load().enabled and store.load().mode == "priority")
             os.write(terminal.master, b"\x1b")
             lines = terminal.wait(lambda lines: not popup_open(lines)
-                                  and sum("agente" in line[:36] and "tab01" in line[:36] for line in lines) == 3)
+                                  and sum("agente" in line[:36] for line in lines) == 3
+                                  and sum("projeto" in line[:36] and "Local" in line[:36] for line in lines) == 3)
             entries = [(y, text) for y, text in sidebar_lines(lines, 36) if "agente" in text]
             for y, text in entries:
                 assert "projeto" in lines[y-1][:36] and "Local" not in text
+                assert "tab01" not in text
                 x = text.index("◐")
                 assert terminal.screen.buffer[y][x].fg == "f9e2af"
                 assert terminal.screen.buffer[y][text.index("agente")].fg == "bd93f9"
-                assert terminal.screen.buffer[y][text.index("tab01")].fg == "6272a4"
+                assert terminal.screen.buffer[y-1][lines[y-1].index("Local")].fg == "6272a4"
             selected = store.load()
             h.command("local", "plugin", "action", "invoke", "restart", "--plugin", PLUGIN_ID)
             wait(lambda: not worker_stopped(store.state) and all(t.get("has_agent") for t in tokens(h, "local")))
@@ -315,7 +335,7 @@ def check_runtime(priority_evidence=None):
             wait(lambda: len(tokens(h, "local")) == 2 and tokens(h, "local")[0].get("has_machine") == "Local")
             panes = h.api("local", "session.snapshot")["snapshot"]["panes"]
             wait(lambda: not next(p for p in h.api("local", "session.snapshot")["snapshot"]["panes"]
-                                 if p["pane_id"] == local[0][0]).get("tokens", {}).get("has_agent"))
+                                 if p["pane_id"] == local[0][0]).get("tokens", {}).get(store.token_names()["has_agent"]))
             h.api("local", "pane.report_agent", {"pane_id": local[0][0], "source": "test:fixture",
                                                   "agent": "codex", "state": "idle"})
             h.api("local", "agent.rename", {"target": local[0][0], "name": "agente01"})
@@ -451,8 +471,14 @@ def check_views():
             assert store.load().profile("priority").line1 == ("machine", "project")
             assert store.load().profile("priority").line2 == ("status", "agent", "tab")
             os.write(terminal.master, b"\x1b")
-            lines = terminal.wait(lambda lines: not popup_open(lines)
-                                  and sum(line[5:11] == "agente" for line in lines) == 6)
+            def priority_rendered(lines):
+                entries = [(y, text) for y, text in sidebar_lines(lines, 36) if "agente" in text]
+                return (not popup_open(lines) and len(entries) == 6
+                        and all(text[5:11] == "agente" and "tab0" in text
+                                and "projeto" in lines[y-1][:35]
+                                and ("Local" in lines[y-1][:35] or "machine02" in lines[y-1][:35])
+                                for y, text in entries))
+            lines = terminal.wait(priority_rendered)
             for y, text in sidebar_lines(lines, 36):
                 if "agente" not in text:
                     continue
@@ -576,14 +602,19 @@ def check_profiles():
             terminal.wait(lambda lines: any("Active" in line and "[No]" in line for line in lines))
             assert store.load().mode == "grouped"
             selected = 0
-            for index, steps, name, field, expected in (
-                    (2, 7, "Pink", "machine_color", "#ff79c6"),
-                    (3, 9, "Orange", "project_color", "#ffb86c"),
-                    (4, 6, "Cyan", "agent_color", "#8be9fd"),
-                    (5, 4, "Green", "tab_color", "#50fa7b")):
+            for index, name, field, expected in (
+                    (2, "Pink", "machine_color", "#ff79c6"),
+                    (3, "Orange", "project_color", "#ffb86c"),
+                    (4, "Cyan", "agent_color", "#8be9fd"),
+                    (5, "Green", "tab_color", "#50fa7b")):
                 delta = index - selected
                 os.write(terminal.master, (b"\x1bOB" if delta >= 0 else b"\x1bOA") * abs(delta) + b"\r")
                 terminal.wait(lambda lines: any("    " + name in line for line in lines))
+                # The picker starts at the saved color, including explicit factory colors.
+                current = getattr(store.load().profile("priority"), field)
+                start = next(i for i, (_, color) in enumerate(OPTIONS) if color == current)
+                target = next(i for i, (label, _) in enumerate(OPTIONS) if label == name)
+                steps = (target - start) % len(OPTIONS)
                 os.write(terminal.master, b"\x1bOB" * steps + b"\r")
                 wait(lambda: getattr(store.load().profile("priority"), field) == expected)
                 terminal.wait(lambda lines: any("Saved" in line for line in lines))
@@ -674,6 +705,73 @@ def check_profiles():
             terminal.close()
 
 
+def check_independent_installations():
+    """A remote installation cannot overwrite the viewing installation's tokens."""
+    with HerdrHarness() as h:
+        h.connect_remote()
+        stores = {}
+        for machine in ("local", "remote"):
+            h.start(machine, rows="")
+            h.populate(machine)
+            store = Store(h.root / machine / "config/herdr/plugins/config" / PLUGIN_ID,
+                          h.root / machine / "state/herdr/plugins" / PLUGIN_ID)
+            mode = "priority" if machine == "local" else "grouped"
+            store.save(Settings().with_profile("priority", line1=("project", "machine"),
+                                               line2=("status", "agent")).with_active(mode))
+            stores[machine] = store
+            h.command(machine, "plugin", "link", str(ROOT / "herdr-plugin.toml"), "--enabled")
+            snapshot = h.api(machine, "session.snapshot")["snapshot"]
+            target = next(w for w in snapshot["workspaces"] if not w["focused"])
+            h.api(machine, "workspace.focus", {"workspace_id": target["workspace_id"]})
+        local_terminal, remote_terminal = h.terminal(), h.terminal("remote")
+        try:
+            def independent():
+                from_viewer = tokens(h, "remote")
+                from_remote = tokens(h, "remote", origin="remote")
+                return (all(t.get("has_machine") == "machine02" and t.get("has_agent") for t in from_viewer)
+                        and [t.get("has_machine") for t in from_remote] == ["Local", None, None]
+                        and all(t.get("has_agent_prefix") for t in from_remote))
+            wait(independent)
+            lines = local_terminal.wait(lambda lines: sum("machine02" in text for _, text in sidebar_lines(lines, 36)) == 3)
+            remote_terminal.wait(lambda lines: sum(line[10:16] == "agente" for line in lines) == 3)
+            # Open remote Settings through the viewer connected to that machine.
+            remote_row = next(y for y, text in sidebar_lines(lines, 36) if "machine02" in text)
+            local_terminal.click(5, remote_row + 1)
+            h.command("remote", "pane", "run", "w1:p1", "printf 'REMOTE_READY\\n'")
+            local_terminal.wait(lambda lines: any("REMOTE_READY" in line[36:] for line in lines))
+            h.api("remote", "plugin.pane.open", {"plugin_id": PLUGIN_ID, "entrypoint": "settings", "focus": True})
+            local_terminal.wait(popup_open)
+            os.write(local_terminal.master, b"\x1bOB" * 4 + b"\r")
+            local_terminal.wait(lambda lines: any("Pink" in line for line in lines))
+            os.write(local_terminal.master, b"\x1bOB" * 7 + b"\r")
+            wait(lambda: stores["remote"].load().grouped.agent_color == "#ff79c6")
+            os.write(local_terminal.master, b"\x1b")
+            local_terminal.wait(lambda lines: not popup_open(lines))
+            remote_terminal.wait(lambda lines: not popup_open(lines))
+            # Observe more than two remote reconciliation intervals, including refreshes.
+            deadline = time.monotonic() + 11
+            while time.monotonic() < deadline:
+                assert independent(), "Independent installations replaced each other's presentation"
+                local_lines = local_terminal.read(.05)
+                remote_lines = remote_terminal.read(.05)
+                assert sum("machine02" in text for _, text in sidebar_lines(local_lines, 36)) == 3
+                assert sum(line[10:16] == "agente" for line in remote_lines) == 3
+            # Cleanup of one installation is restricted to its own metadata namespace.
+            h.command("local", "plugin", "disable", PLUGIN_ID)
+            wait(lambda: worker_stopped(stores["local"].state))
+            assert not any(t.get("has_agent") for t in tokens(h, "remote"))
+            assert [t.get("has_machine") for t in tokens(h, "remote", origin="remote")] == ["Local", None, None]
+            assert all(t.get("has_agent") for t in tokens(h, "remote", origin="remote"))
+        finally:
+            for machine in ("local", "remote"):
+                h.command(machine, "plugin", "disable", PLUGIN_ID, check=False)
+            for store in stores.values():
+                wait(lambda: worker_stopped(store.state), timeout=25)
+            local_terminal.close()
+            remote_terminal.close()
+    print("PASS: two active installations, remote Settings, stable native rendering and independent cleanup")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", type=Path)
@@ -683,6 +781,7 @@ def main():
     check_runtime(args.priority_evidence)
     check_views()
     check_profiles()
+    check_independent_installations()
     for width in (18, 22, 36):
         visual_check(width, args.evidence)
     visual_check(36, show_separator=True)

@@ -40,10 +40,9 @@ Regras visuais:
 - Em 11/10/2026, após experimentar as cores em Settings, o usuário definiu Default como Machine = Yellow, Project = Blue e Agent = Purple, nos tons já oferecidos pelo menu. Isso substitui as propostas intermediárias. Não alterar o tema global nem as cores de status do Herdr; escolhas explícitas em Settings continuam preservadas.
 - Em 11/10/2026, o usuário pediu Mode como primeira opção de Settings, com
   Grouped/Priority. Grouped mantém a árvore já aprovada. Priority inicialmente
-  colocou status/projeto acima e IA abaixo; o snapshot posterior do usuário
-  substitui esse default por Project na primeira linha e Status/Agent/Tab na segunda.
-  Não mostrar a máquina no View padrão
-  de Priority; o usuário pode acrescentá-la com View.
+  colocou status/projeto acima e IA abaixo. Um snapshot posterior usou Project
+  na primeira linha e Status/Agent/Tab na segunda; o mais recente substitui esse
+  default por Project/Machine na primeira e Status/Agent na segunda.
   Preservar as cores de projeto e agente e o status nativo. Esse formato foi
   escolhido pelo usuário em 11/10/2026. Não renderizar cabeçalhos separados,
   recuos de árvore ou separadores entre máquinas nesse modo. Show separator
@@ -57,7 +56,7 @@ Regras visuais:
   em qual ordem; cada campo pode aparecer uma vez. O indicador Status é o token
   nativo, incluindo suas cores e estados, e pode ser movido ou escondido. Exigir
   pelo menos um campo no conjunto; uma linha vazia é omitida. Manter o layout
-  padrão do snapshot mais recente (Project acima, Status/Agent/Tab abaixo), sem impor presets.
+  padrão do snapshot mais recente (Project/Machine acima, Status/Agent abaixo), sem impor presets.
 - As quatro cores (Machine, Project, Agent e Tab) são independentes por modo.
   Tab começa em Dark blue (`#6272a4`), conforme pedido posterior do usuário;
   os três defaults anteriores continuam iguais.
@@ -97,6 +96,13 @@ Regras visuais:
   nos dois modos continuam Yellow, Blue, Purple e Dark blue. Ambos começam em No.
   Restore defaults deve restaurar exatamente esse snapshot e a sidebar nativa;
   Restart sidebar apenas recarrega o worker e preserva perfis e ativação.
+- Em pedido posterior em 11/10/2026, o usuário pediu salvar sua configuração
+  atual como novo snapshot, mantendo as imagens e o README existentes. Grouped
+  mantém View Agent, Show separator Off e as quatro cores Default. Priority passa
+  a usar Project/Machine na linha 1, Status/Agent na linha 2 e Machine em Dark blue;
+  as outras três cores continuam Default. Esse snapshot substitui o anterior
+  para novas instalações e Restore defaults, mantendo ambos Active em No.
+  Configurações já salvas continuam preservadas.
 - Em pedido posterior em 11/10/2026, o usuário esclareceu que Restore defaults
   e colocar ambos Active em No devem usar o layout nativo padrão completo do
   Herdr, incluindo Machine. Remover os overrides próprios de Rows e Row gap,
@@ -154,8 +160,6 @@ Machine color    [Default e outras cores]
 Project color    [Default e outras cores]
 Agent color      [Default e outras cores]
 Tab color        [Default e outras cores]
-Line 1           [campos na ordem escolhida]
-Line 2           [campos na ordem escolhida]
 ```
 
 O editor de View em Priority mostra as duas linhas e os cinco campos disponíveis.
@@ -167,6 +171,10 @@ Esc descarta o rascunho sem escrever. Exemplo possível, conforme o usuário:
 Line 1  [Machine | Project]
 Line 2  [Status | Agent | Tab]
 ```
+
+Em pedido posterior em 11/10/2026, o usuário pediu mostrar Line 1 e Line 2
+somente após abrir Edit lines, removendo o resumo da aba Priority. O botão
+Save view fica mais acima no editor, com espaço até as orientações do rodapé.
 
 O usuário troca abas com esquerda/direita ou Tab, escolhe campos e cores com
 cima/baixo e Enter, e fecha com Esc. As alterações confirmadas são salvas e
@@ -238,7 +246,7 @@ No modo Priority, cada agente recebe seu próprio contexto selecionado, sem
 âncoras de árvore. Limpar `has_agent_prefix`, `has_gap` e tokens de campos
 escondidos. Renderizar os campos na ordem salva de cada linha, usando os tokens
 nativos `state_icon` e `tab` nas posições escolhidas. O padrão usa duas linhas:
-Project e Status/Agent/Tab. Linhas vazias são omitidas; não permitir ambas vazias.
+Project/Machine e Status/Agent. Linhas vazias são omitidas; não permitir ambas vazias.
 As duas linhas pertencem ao mesmo agente e focam o mesmo pane. O Herdr fornece
 posição, indicador, ordenação e corte de textos longos. Manter as mesmas chaves
 compostas e a publicação incremental nos dois modos, mesmo quando Agent,
@@ -261,6 +269,16 @@ Tokens propostos, pertencentes exclusivamente a este plugin:
 Atualizar os valores antigos de `has_agent_prefix` para remover os marcadores de instalações já ativas e limpar o token nas transições e na desativação.
 
 Publicar como `plugin:<HERDR_PLUGIN_ID>`. Limpar somente esses tokens. Não escrever nos tokens do plugin de sidebar anterior ou nos nomes, estados, títulos e autoridades nativas. Conferir o contrato de TTL e limpar valores obsoletos em todas as entradas ainda acessíveis.
+
+Em 11/10/2026, o usuário relatou cabeçalhos piscando após editar Settings,
+inclusive ao acessar uma instalação como machine de outro Herdr. As instalações
+devem coexistir com configurações independentes: os nomes acima são campos
+lógicos, enquanto as chaves publicadas incluem um UUID portátil por instalação,
+guardado no estado durável e preservado em updates/reinstalações. Manter o ID
+oficial e a origem de publicação. Uma instalação não pode sobrescrever nem limpar
+os tokens de outra. Respeitar o limite público de 32 caracteres por chave.
+Serializar a atualização de configuração do worker com a gravação de Settings,
+sem bloquear a detecção de pausa e a limpeza necessárias ao Active = No.
 
 A API de metadados aplica atualizações por token, não uma transação para a árvore inteira. Publicar diferenças, reconciliar após eventos/reconexões e evitar exibir o mesmo cabeçalho em duas entradas durante a troca de âncora. Documentar a possível janela de atualização; não prometer atomicidade inexistente.
 
