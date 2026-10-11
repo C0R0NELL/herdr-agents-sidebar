@@ -1,0 +1,53 @@
+# Keep this identity unchanged for local links and managed GitHub installs.
+id = "c0r0nell.agents-sidebar"
+name = "Agents Sidebar"
+version = "0.1.0"
+min_herdr_version = "0.9.3"
+description = "Group agents by machine and workspace in Herdr's native sidebar."
+platforms = ["linux"]
+
+[[build]]
+command = ["python3", "-B", "sidebar.py", "check"]
+
+[[startup]]
+command = ["python3", "-B", "sidebar.py", "ensure"]
+
+[[actions]]
+id = "apply"
+title = "Apply sidebar"
+description = "Enable grouped machine, project and agent rows."
+command = ["python3", "-B", "sidebar.py", "apply"]
+
+[[actions]]
+id = "settings"
+title = "Settings"
+description = "Choose group colors and show or hide the separator."
+command = ["python3", "-B", "sidebar.py", "settings-open"]
+
+[[actions]]
+id = "restart"
+title = "Restart sidebar"
+description = "Reload plugin code without restarting Herdr or agents."
+command = ["python3", "-B", "sidebar.py", "restart"]
+
+[[actions]]
+id = "restore"
+title = "Restore sidebar"
+description = "Remove this plugin's tokens and restore its previous configuration."
+command = ["python3", "-B", "sidebar.py", "restore"]
+
+[[panes]]
+id = "settings"
+title = "Agents Sidebar settings"
+placement = "popup"
+width = 60
+height = 18
+command = ["python3", "-B", "sidebar.py", "settings"]
+
+[[events]]
+on = "workspace.focused"
+command = ["python3", "-B", "sidebar.py", "ensure"]
+
+[[events]]
+on = "pane.agent_detected"
+command = ["python3", "-B", "sidebar.py", "ensure"]

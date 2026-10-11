@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Private state must live outside source checkouts.
+/.local
+/.codex
+/.claude
+/.herdr-web-ui/
+/profiles/
+/backups/
+/rotated/
+/state/
+/artifacts/
+/herdr-plugin.*.toml
+auth.json*
+credentials.json*
+.credentials.json*
+.claude.json*
+.env
+.env.*
+!.env.example
+*.log
+*.sock
+.DS_Store

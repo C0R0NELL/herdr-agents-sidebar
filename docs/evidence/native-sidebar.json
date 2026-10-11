@@ -1,0 +1,33 @@
+{
+  "herdr": "0.9.3",
+  "protocol": 22,
+  "width": 36,
+  "transport": "local SSH shim, real Herdr servers and bridges",
+  "rows": [
+    " machine01",
+    "   projeto01",
+    "      · ○ agente01",
+    "      · ○ agente02",
+    "   projeto02",
+    "      · ○ agente03",
+    "   ·",
+    " machine02",
+    "   projeto01",
+    "      · ○ agente01",
+    "      · ○ agente02",
+    "   projeto02",
+    "      · ○ agente03"
+  ],
+  "different_client_catalog": {
+    "rows": [
+      "machine01",
+      "projeto01",
+      "· ○ agente01",
+      "· ○ agente02",
+      "projeto02",
+      "· ○ agente03",
+      "·"
+    ],
+    "result": "shared gap token trails the final local agent"
+  }
+}
