@@ -8,8 +8,8 @@ from pathlib import Path
 import sys
 import tomllib
 
-from configuration import Conflict, DARK_BLUE, DRACULA_COLORS, PLUGIN_ID, Settings, Store
-from layout import GROUPED_VIEWS, MODES, SIDEBAR_FIELDS
+from configuration import COLOR_FIELDS, Conflict, DARK_BLUE, DRACULA_COLORS, PLUGIN_ID, Settings, Store
+from layout import GROUPED_FIELDS, MODES, SIDEBAR_FIELDS, SIDEBAR_LABELS
 
 # Intent: a developer choosing visual groups while staying in Herdr.
 # Palette: yellow machines, blue projects, purple names; native status.
@@ -20,15 +20,14 @@ OPTIONS = (("Default", "default"), ("Blue", "#89b4fa")) + tuple(
     (name, DRACULA_COLORS[name])
     for name in ("Yellow", "White", "Green", "Red", "Cyan", "Pink", "Purple", "Orange")) + (("Dark blue", DARK_BLUE),)
 MODE_OPTIONS = (("Grouped", "grouped"), ("Priority", "priority"))
-VIEW_OPTIONS = tuple((" / ".join(part.title() for part in view.split("/")), view) for view in GROUPED_VIEWS)
-FIELDS = (("Active", "active"), ("View", "view"), ("Machine color", "machine_color"),
-          ("Project color", "project_color"), ("Agent color", "agent_color"), ("Tab color", "tab_color"))
+FIELDS = (("Active", "active"), ("View", "view")) + tuple(
+    (SIDEBAR_LABELS[name] + " color", name + "_color") for name in COLOR_FIELDS)
 
 
 def display(value):
     if type(value) is bool:
         return "On" if value else "Off"
-    return next((name for name, code in MODE_OPTIONS + VIEW_OPTIONS + OPTIONS if code == value), value)
+    return next((name for name, code in MODE_OPTIONS + OPTIONS if code == value), value)
 
 
 def write(screen, y, x, text, attributes=0):
@@ -41,51 +40,72 @@ def write(screen, y, x, text, attributes=0):
 
 
 def line_text(line):
-    return " | ".join(name.title() for name in line) or "(empty)"
+    return " | ".join(SIDEBAR_LABELS[name] for name in line) or "(empty)"
 
 
-def priority_view_ui(screen, profile):
+def option_rows(screen, entries, selected, *, top=5):
+    """Scroll bounded popup lists, retaining a blank row before Save view."""
+    height, _ = screen.getmaxyx()
+    capacity = max(1, height-top-5)
+    position = next(i for i, (index, _) in enumerate(entries) if index == selected)
+    offset = max(0, min(position-capacity+1, len(entries)-capacity))
+    for row, (index, text) in enumerate(entries[offset:offset+capacity]):
+        write(screen, top+row, 2, text, curses.A_REVERSE if index == selected else 0)
+
+
+def view_ui(screen, profile, mode):
     """Edit a bounded draft; Escape never writes a partial layout."""
-    lines = [list(profile.line1), list(profile.line2)]
+    fields = GROUPED_FIELDS if mode == "grouped" else SIDEBAR_FIELDS
+    lines = [list(profile.line1)] + ([list(profile.line2)] if mode == "priority" else [])
     selected, message = 0, ""
     while True:
         screen.erase()
         height, _ = screen.getmaxyx()
-        write(screen, 1, 2, "Priority view", curses.A_BOLD)
+        write(screen, 1, 2, mode.title() + " view", curses.A_BOLD)
         for index, line in enumerate(lines):
-            write(screen, index + 3, 2, f"Line {index+1}  [{line_text(line)}]")
-        for index, name in enumerate(SIDEBAR_FIELDS):
+            label = "Agent line" if mode == "grouped" else f"Line {index+1}"
+            write(screen, index + 3, 2, f"{label}  [{line_text(line)}]")
+        entries = []
+        for index, name in enumerate(fields):
             location = next((i for i, line in enumerate(lines) if name in line), None)
-            text = "Hidden" if location is None else f"Line {location+1} | position {lines[location].index(name)+1}"
-            write(screen, index+5, 2, f"  {name.title():<12} {text}", curses.A_REVERSE if selected == index else 0)
-        write(screen, 10, 2, "  Save view", curses.A_REVERSE if selected == len(SIDEBAR_FIELDS) else 0)
-        write(screen, height-3, 2, message or "Enter cycles Hidden -> Line 1 -> Line 2 -> Hidden")
+            text = "Hidden" if location is None else (
+                ("Shown" if mode == "grouped" else f"Line {location+1}") + f" | position {lines[location].index(name)+1}")
+            entries.append((index, f"  {SIDEBAR_LABELS[name]:<22} {text}"))
+        entries.extend(((None, ""), (len(fields), "  Save view")))
+        option_rows(screen, entries, selected)
+        write(screen, height-3, 2, message or ("Enter toggles Hidden / Shown" if mode == "grouped" else
+                                             "Enter cycles Hidden -> Line 1 -> Line 2 -> Hidden"))
         write(screen, height-2, 2, "left/right reorder | up/down select | esc cancel")
         screen.refresh()
         key = screen.getch()
         if key == 27:
             return None
         if key in (curses.KEY_UP, ord("k")):
-            selected = (selected-1) % (len(SIDEBAR_FIELDS)+1)
+            selected = (selected-1) % (len(fields)+1)
         elif key in (curses.KEY_DOWN, ord("j")):
-            selected = (selected+1) % (len(SIDEBAR_FIELDS)+1)
+            selected = (selected+1) % (len(fields)+1)
         elif key in (10, 13, curses.KEY_ENTER):
-            if selected == len(SIDEBAR_FIELDS):
+            if selected == len(fields):
                 try:
-                    draft = replace(profile, line1=tuple(lines[0]), line2=tuple(lines[1])).normalized()
-                    return draft.line1, draft.line2
+                    changes = {"line1": tuple(lines[0])}
+                    if mode == "priority":
+                        changes["line2"] = tuple(lines[1])
+                    replace(profile, **changes).normalized()
+                    return changes
                 except ValueError as error:
                     message = str(error)
                 continue
-            name = SIDEBAR_FIELDS[selected]
+            name = fields[selected]
             location = next((i for i, line in enumerate(lines) if name in line), None)
             if location is not None:
                 lines[location].remove(name)
-            if location != 1:
+            if mode == "grouped" and location is None:
+                lines[0].append(name)
+            elif mode == "priority" and location != 1:
                 lines[0 if location is None else 1].append(name)
             message = ""
-        elif key in (curses.KEY_LEFT, curses.KEY_RIGHT) and selected < len(SIDEBAR_FIELDS):
-            name = SIDEBAR_FIELDS[selected]
+        elif key in (curses.KEY_LEFT, curses.KEY_RIGHT) and selected < len(fields):
+            name = fields[selected]
             line = next((line for line in lines if name in line), None)
             if line is not None:
                 index = line.index(name)
@@ -112,10 +132,9 @@ def settings_ui(herdr, store):
             write(screen, 1, 2, fields[selected][0] if choosing else "Settings", curses.A_BOLD)
             field = fields[selected][1]
             profile = settings.profile(tab)
-            choices = VIEW_OPTIONS if field == "view" else OPTIONS
+            choices = OPTIONS
             if choosing:
-                for index, (name, _) in enumerate(choices):
-                    write(screen, index + 3, 2, f"  {name}", curses.A_REVERSE if option == index else 0)
+                option_rows(screen, [(i, "  " + name) for i, (name, _) in enumerate(choices)], option, top=3)
             else:
                 tab_x = 2
                 for index, (name, mode) in enumerate(MODE_OPTIONS):
@@ -127,11 +146,12 @@ def settings_ui(herdr, store):
                     if index == 0:
                         write(screen, 3, tab_x, " | ")
                         tab_x += 3
+                entries = []
                 for index, (name, field) in enumerate(fields):
                     value = ("Yes" if settings.enabled and settings.mode == tab else "No") if field == "active" else (
-                        "Edit lines" if field == "view" and tab == "priority" else display(getattr(profile, field)))
-                    text = f"  {name:<19} [{value}]"
-                    write(screen, index + 5, 2, text, curses.A_REVERSE if selected == index else 0)
+                        ("Edit line" if tab == "grouped" else "Edit lines") if field == "view" else display(getattr(profile, field)))
+                    entries.append((index, f"  {name:<27} [{value}]"))
+                option_rows(screen, entries, selected)
             field = fields[selected][1]
             hint = {"active": "Both No restores the native sidebar" if settings.enabled else "Set Active to Yes to use this layout",
                     "view": "Changes belong only to this tab"}.get(field, "") if not choosing else ""
@@ -159,12 +179,12 @@ def settings_ui(herdr, store):
                     selected = (selected + 1) % len(fields)
             elif key in (10, 13, curses.KEY_ENTER):
                 field = fields[selected][1]
-                if field == "view" and tab == "priority":
-                    lines = priority_view_ui(screen, profile)
-                    if lines is None:
+                if field == "view":
+                    changes = view_ui(screen, profile, tab)
+                    if changes is None:
                         message = ""
                         continue
-                    proposed = settings.with_profile(tab, line1=lines[0], line2=lines[1])
+                    proposed = settings.with_profile(tab, **changes)
                 elif not choosing and field not in ("show_separator", "active"):
                     choosing = True
                     option = next((i for i, (_, code) in enumerate(choices)

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from configuration import Conflict, DARK_BLUE, DEFAULT_ROWS, Presentation, Settings, Store
+from configuration import COLOR_FIELDS, Conflict, DARK_BLUE, DEFAULT_ROWS, Presentation, Settings, Store
 
 CONFIG = '''# Keep user comments and commands.
 [keys]
@@ -187,9 +187,12 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(factory.priority.line2, ("machine",))
         for mode in ("grouped", "priority"):
             profile = factory.profile(mode)
-            for name in ("machine_color", "project_color", "agent_color", "tab_color"):
+            for name in (field + "_color" for field in COLOR_FIELDS):
                 expected = DARK_BLUE if mode == "priority" and name == "machine_color" else "default"
                 self.assertEqual(getattr(profile, name), expected)
+        for mode in ("grouped", "priority"):
+            self.assertTrue(set(("pane", "status_text", "terminal_title", "terminal_title_stripped")).isdisjoint(
+                factory.with_active(mode).visible_fields))
         self.assertFalse(store.preferences.exists(), "Reading defaults must not write user state")
 
     def test_installations_have_durable_independent_metadata_keys(self):
@@ -211,6 +214,43 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual((first.state.stat().st_mode & 0o777), 0o700)
         self.assertEqual(preferences.rows(token_names=first_keys)[0][0]["token"], "$" + first_keys["has_project"])
 
+    def test_native_details_upgrade_and_round_trip_without_changing_saved_views(self):
+        import tomllib
+        store = Store(self.root / "preferences", self.root / "state")
+        store.config.mkdir()
+        original = ('schema = 4\nmode = "priority"\nenabled = true\n'
+                    '[grouped]\nview = "agent/tab"\nagent_color = "#abc"\n'
+                    '[priority]\nline1 = ["status", "agent"]\nline2 = ["machine"]\n')
+        store.preferences.write_text(original)
+        previous = store.load()
+        self.assertEqual(store.preferences.read_text(), original)
+        self.assertEqual(previous.grouped.view, "agent/tab")
+        self.assertEqual(previous.priority.line1, ("status", "agent"))
+        self.assertEqual(previous.priority.line2, ("machine",))
+        self.assertTrue(previous.enabled)
+        extras = ("pane", "status_text", "terminal_title", "terminal_title_stripped")
+        self.assertTrue(all(name not in previous.visible_fields for name in extras))
+        edited = previous.with_profile("priority", line1=("status", "agent", "pane", "status_text"),
+                                       line2=("terminal_title", "terminal_title_stripped"), pane_color="#f79")
+        edited = edited.with_profile("grouped", line1=("status", "agent", "tab", *extras),
+                                    pane_color="#abc")
+        store.save(edited)
+        saved = store.load()
+        self.assertEqual(saved, edited.normalized())
+        self.assertEqual(saved.grouped.pane_color, "#aabbcc")
+        self.assertEqual(saved.priority.pane_color, "#ff7799")
+        self.assertEqual(tomllib.loads(store.preferences.read_text())["schema"], 5)
+        for mode in ("grouped", "priority"):
+            rows = saved.with_active(mode).rows()
+            tokens = {item["token"]: item for row in rows for item in row if isinstance(item, dict)}
+            for native in ("pane", "state_text", "terminal_title", "terminal_title_stripped"):
+                self.assertIn(native, tokens)
+                self.assertEqual(tokens[native]["fg"], ("#aabbcc" if mode == "grouped" else "#ff7799")
+                                 if native == "pane" else DARK_BLUE)
+            if mode == "grouped":
+                self.assertEqual([item if isinstance(item, str) else item["token"] for item in rows[2]][-5:],
+                                 ["tab", "pane", "state_text", "terminal_title", "terminal_title_stripped"])
+
     def test_unknown_or_invalid_installation_identity_is_never_replaced(self):
         store = Store(self.root / "preferences", self.root / "state")
         store.state.mkdir()
@@ -229,6 +269,10 @@ class ConfigurationTests(unittest.TestCase):
         for mode, changes in (("grouped", {"machine_color": "red"}),
                               ("grouped", {"show_separator": "false"}),
                               ("grouped", {"view": "machine"}),
+                              ("grouped", {"line1": ()}),
+                              ("grouped", {"line1": ("agent", "machine")}),
+                              ("grouped", {"line1": ("pane", "pane")}),
+                              ("grouped", {"pane_color": "red"}),
                               ("priority", {"view": "agent/tab"}),
                               ("priority", {"tab_color": "white"}),
                               ("priority", {"line1": (), "line2": ()}),
@@ -340,7 +384,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(saved.profile("priority").line1, ("status", "project"))
         self.assertEqual(saved.profile("priority").machine_color, "#123456")
         parsed = tomllib.loads(store.preferences.read_text())
-        self.assertEqual(parsed["schema"], 4)
+        self.assertEqual(parsed["schema"], 5)
         self.assertEqual(parsed["mode"], "priority")
         self.assertIn("grouped", parsed)
         self.assertIn("priority", parsed)
@@ -365,7 +409,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_ambiguous_or_newer_profile_files_cannot_be_overwritten(self):
         store = Store(self.root / "preferences", self.root / "state")
         store.config.mkdir()
-        for original in ('schema = 5\nmode = "grouped"\n',
+        for original in ('schema = 6\nmode = "grouped"\n',
                          'schema = 4\nenabled = "false"\n',
                          'schema = 1\nmachine_color = "#abcdef"\n[grouped]\nview = "agent"\n',
                          'schema = 2\nmachine_color = "#abcdef"\n[grouped]\nview = "agent"\n',
@@ -396,9 +440,11 @@ class ConfigurationTests(unittest.TestCase):
         edited = edited.with_profile("priority", line1=("machine", "project"), line2=("agent", "tab", "status"))
         store.save(edited)
         parsed = tomllib.loads(store.preferences.read_text())
-        self.assertEqual(parsed["schema"], 4)
+        self.assertEqual(parsed["schema"], 5)
         self.assertNotIn("view", parsed["priority"])
-        self.assertNotIn("line1", parsed["grouped"])
+        self.assertNotIn("view", parsed["grouped"])
+        self.assertNotIn("line2", parsed["grouped"])
+        self.assertEqual(parsed["grouped"]["line1"], ["status", "agent", "tab"])
         self.assertEqual(parsed["grouped"]["tab_color"], "#aabbcc")
         self.assertEqual(store.load().profile("priority").line2, ("agent", "tab", "status"))
         group_rows = store.load().with_active("grouped").rows()

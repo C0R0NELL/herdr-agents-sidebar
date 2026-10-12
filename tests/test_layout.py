@@ -63,7 +63,8 @@ class LayoutTests(unittest.TestCase):
                 for item in machine.snapshot[field]:
                     item["tokens"] = {**original[AgentKey(machine.id, machine.session, "w1", item["pane_id"])],
                                       "foreign": "preserve"}
-        for fields in (("status", "agent"), ("status", "tab"), ("agent", "project"),
+        for fields in (("status", "agent"), ("status", "tab"), ("agent", "project"), ("pane",),
+                       ("status_text", "terminal_title", "terminal_title_stripped"),
                        ("machine", "project", "status", "agent", "tab")):
             with self.subTest(fields=fields):
                 desired = layout(machines, gap_between_machines=True, mode="priority", fields=fields)

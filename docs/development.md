@@ -50,7 +50,7 @@ Default paths are:
 ~/.local/state/herdr/plugins/c0r0nell.agents-sidebar/instance.json
 ```
 
-Settings use schema 4 and private atomic writes. Schemas 1, 2 and 3 remain readable
+Settings use schema 5 and private atomic writes. Schemas 1, 2, 3 and 4 remain readable
 without modifying files. Shared colors become independent profiles; older
 Priority presets become ordered fields on two lines. Grouped restores the fixed
 tree, retaining optional Tab. Existing visible tabs retain their previous color;
@@ -59,7 +59,7 @@ The next save writes the new format, rejecting unknown fields, mixed formats,
 misplaced mode-specific fields and newer schemas.
 The selected `mode` and boolean `enabled` are the single activation record.
 When neither mode is active, the selected profile is remembered for reopening
-Settings. Legacy `control.json` pause records are read during migration; schema 4
+Settings. Legacy `control.json` pause records are read during migration; explicit activation
 is authoritative afterward, so old runtime flags cannot override new settings.
 State contains config ownership,
 an installation UUID, bounded worker locks and small error records, without persisted agent snapshots
@@ -90,7 +90,7 @@ Existing saved choices, including Show separator On,
 are preserved. Settings without a `mode` field load as Grouped. Priority uses two
 native rows per agent: native status, project and agent above, machine below.
 Its factory view hides Tab and gaps; identities remain scoped by machine.
-Settings has Grouped and Priority tabs, each with Active, View and four colors.
+Settings has Grouped and Priority tabs, each with Active, View and eight colors.
 Left/right or Tab changes the inspected profile without activating it. Active
 allows zero or one active profile: Yes deactivates the other profile, and No on
 the active profile stops workers, clears owned tokens and removes the Rows and
@@ -98,19 +98,25 @@ Row gap overrides so Herdr supplies its default native layout, including Machine
 Both No persists across startup, navigation and reinstall. Editing
 inactive profiles does not activate them or change the live rows.
 Show separator appears only in Grouped.
-Grouped View selects Agent or Agent / Tab; machine/project headings remain fixed.
-Priority View opens a draft editor for Status, Agent, Tab, Machine and Project.
-Line summaries appear only inside Edit lines. Save view sits above the footer
-with two blank rows separating the action from the instructions.
-Enter cycles a field through Hidden, Line 1, Line 2 and Hidden; left/right reorders
-it within its assigned line. Save view applies the draft; Escape discards it.
+Grouped View opens Edit line for Status, Agent, Tab, Pane, Status text, Terminal
+title and Terminal title (clean); machine/project headings remain fixed.
+Priority's Edit lines adds Machine and Project to the same fields across two lines.
+Summaries appear only in these editors. A blank row separates fields from Save view;
+scrolling keeps selection and footer usable in short popups. The manifest requests
+a 24-row popup so every field and Save view fit when space permits.
+Grouped Enter toggles Hidden/Shown; Priority cycles Hidden, Line 1, Line 2 and Hidden.
+Left/right reorders within a line. Save view applies the draft; Escape discards it.
 Each field appears at most once, at least one field must remain, and empty lines
 are omitted. The native renderer supplies separators, offsets and clipping.
-`[grouped]` saves View and Show separator; `[priority]` saves ordered `line1` and
-`line2` arrays. Both save their own four colors. Tab uses the native `tab` token
-and an independent color, without another tree level or a copied label. Status
-remains the unstyled native `state_icon` at its chosen position. Hidden Priority
-fields clear owned tokens; native identities and ordering remain unchanged.
+`[grouped]` saves ordered `line1` and Show separator; `[priority]` saves `line1` and
+`line2`. Both save eight colors. Schema 4's Agent/Agent+Tab presets migrate to the
+same ordered Grouped line, preserving activation, colors and Priority lines.
+Reading never rewrites preferences. Older versions reject schema 5 rather than
+overwriting it. Native details use `tab`, `pane`, `state_text`, `terminal_title`
+and `terminal_title_stripped`, with no copied values or extra metadata keys.
+The four new fields start hidden with Default resolving to Dark blue; existing
+factory lines remain unchanged. Status is the unstyled native `state_icon`.
+Hidden fields clear owned tokens; native identities and ordering remain unchanged.
 Mode chooses presentation only. For the Grouped tree, select Grouped using
 Herdr's native heading so machines and projects stay together. Priority rows
 keep their context under either native order; choosing native Priority adds

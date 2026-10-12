@@ -1,7 +1,7 @@
 # Keep this identity unchanged for local links and managed GitHub installs.
 id = "c0r0nell.agents-sidebar"
 name = "Agents Sidebar"
-version = "0.2.2"
+version = "0.3.0"
 min_herdr_version = "0.9.3"
 description = "Grouped and priority layouts for Herdr's native agent sidebar."
 platforms = ["linux"]
@@ -35,7 +35,7 @@ id = "settings"
 title = "Agents Sidebar settings"
 placement = "popup"
 width = 60
-height = 18
+height = 24
 command = ["python3", "-B", "sidebar.py", "settings"]
 
 [[events]]

@@ -27,9 +27,11 @@ in Herdr's agent sidebar, then set **Active → Yes**. Both modes start inactive
 activating one leaves the other inactive. Settings does not change Herdr's order.
 Set both to **No** to restore Herdr's default native layout, including machine
 labels, keeping both profiles saved.
-Grouped keeps the machine/project tree and offers **Agent** or **Agent / Tab**.
-Priority's **View** editor lets you arrange Status, Agent, Tab, Machine and Project
-across two lines, or hide fields. Each mode remembers its view and four colors.
+Grouped keeps the machine/project tree; **View → Edit line** arranges or hides
+Status, Agent, Tab, Pane, Status text and raw/clean Terminal title on one agent line.
+Priority's **View → Edit lines** offers the same fields plus Machine and Project
+across two lines. New details start hidden with Dark blue colors; each mode saves
+its own view and colors.
 The Grouped tree requires Grouped order in Herdr. Priority rows work with either
 native order. Settings changes apply live;
 Show separator affects Grouped.

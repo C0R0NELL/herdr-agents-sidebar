@@ -76,11 +76,11 @@ events. Cached disconnected machines remain grouped in memory; Herdr supplies
 its own stale styling. No credential store or network scanning is used.
 
 Settings has Grouped and Priority tabs. Grouped retains the tree; Priority defaults to two
-native rows: project above, native status, agent and tab below. The default colors
+native rows: Status/Project/Agent above, Machine below. The default colors
 are yellow, blue, purple and dark blue, with the machine separator off. This factory
 snapshot was captured from the user's approved preferences on 2026-10-11; it
-contains presentation preferences only, without user paths or agent data. Priority hides
-machine labels by default without changing the machine-scoped identities.
+contains presentation preferences only, without user paths or agent data. Its machines
+use Dark blue; new detail fields start hidden without changing machine-scoped identities.
 At 36 columns, both local and
 remote rows were checked with native priority transitions, configured colors and
 mouse focus on the context and agent lines.
@@ -88,13 +88,20 @@ Switching Mode leaves native ordering unchanged; the user selects Grouped or
 Priority in Herdr independently. Old preferences default to Grouped, and machine
 gaps are absent in Priority even if Show separator is saved as On.
 
-Grouped View follows Active and offers Agent or Agent / Tab. Both were exercised
+Grouped View follows Active and opens Edit line. Its original Agent and Agent/Tab views were exercised
 through the real popup at 36 columns on 2026-10-11, retaining one machine heading
 per machine, one project heading per project, and aligned native status/name cells.
 Tab uses the native label inline after the agent, with its own Dark blue default.
 
-Priority View edits an ordered draft of Status, Agent, Tab, Machine and Project
-across two lines. Real popup checks built Machine/Project above Status/Agent/Tab,
+Both editors now also offer Pane, Status text, Terminal title and Terminal title (clean),
+with separate Dark blue defaults per mode. Grouped keeps one ordered agent line
+under fixed machine/project headings; Priority adds Machine/Project across two lines.
+On 2026-10-12, real popup checks selected, reordered and cancelled the new fields,
+rendered native raw/clean OSC titles and working labels, and verified live pane renames
+and remote mouse focus. A blank row precedes Save view; short popups scroll the list.
+Terminal titles are program-provided text, not a discovered description of the task.
+Values stay in Herdr's native tokens rather than plugin metadata or caches.
+Earlier real popup checks built Machine/Project above Status/Agent/Tab,
 verified that drafts and Escape did not change preferences or config, and applied
 both lines with working local/remote mouse focus. Native Status was then moved
 to the end of line 2 and between Machine and Project on line 1; Working kept its
@@ -116,7 +123,7 @@ Reopening Settings, real navigation and
 inactive edits preserved that pause; Yes resumed only the chosen profile.
 Native Working icons retained their glyph/color. Reopening preserved
 profile selection and values. Unit checks cover fixed Grouped headings, field
-validation and schema 1/2/3 migration to schema 4, including old Restore pauses.
+validation and schema 1/2/3/4 migration to schema 5, including old Restore pauses.
 Failure to save during reactivation restored native rows and kept both modes No.
 Older Priority presets become
 ordered lines; Grouped retains optional Tab with the requested fixed tree.

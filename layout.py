@@ -14,7 +14,13 @@ TOKENS = ("has_machine", "has_project", "has_agent_prefix", "has_agent", "has_ga
 HEADERS = ("has_machine", "has_project", "has_gap")
 MODES = ("grouped", "priority")
 GROUPED_VIEWS = ("agent", "agent/tab")
-SIDEBAR_FIELDS = ("status", "agent", "tab", "machine", "project")
+SIDEBAR_LABELS = {"status": "Status", "agent": "Agent", "tab": "Tab", "machine": "Machine",
+                  "project": "Project", "pane": "Pane", "status_text": "Status text",
+                  "terminal_title": "Terminal title", "terminal_title_stripped": "Terminal title (clean)"}
+SIDEBAR_FIELDS = tuple(SIDEBAR_LABELS)
+GROUPED_FIELDS = tuple(name for name in SIDEBAR_FIELDS if name not in ("machine", "project"))
+NATIVE_FIELDS = {"tab": "tab", "pane": "pane", "status_text": "state_text",
+                 "terminal_title": "terminal_title", "terminal_title_stripped": "terminal_title_stripped"}
 DEFAULT_PRIORITY_LINES = (("status", "project"), ("agent",))
 BLANK = "\u2800"
 MAX_AGENTS = 2048
@@ -121,7 +127,7 @@ shared server tokens cannot describe independent per-client machine catalogs.
                 "has_machine": label(machine.label, "Unknown machine", 80) if first and show_machine else None,
                 "has_project": heading,
                 "has_agent_prefix": BLANK * padding if show_project else None,
-                "has_agent": label(name, "Unknown agent", 80),
+                "has_agent": label(name, "Unknown agent", 80) if "agent" in fields else None,
                 "has_gap": None,
             }
             projects.add(project)

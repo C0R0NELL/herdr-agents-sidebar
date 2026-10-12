@@ -50,10 +50,11 @@ order and render presentation in that client's context.
 
 The user approved manual Mode selection in Settings. Grouped keeps the tree
 when the native heading uses Grouped;
-Priority's factory snapshot shows project above native status, agent and tab,
-without machine labels. Priority View can arrange or hide native status,
-agent, tab, project and machine across two lines. Grouped retains the tree with
-an optional inline tab. Choices are remembered per mode. Identities remain machine-scoped. Users choose
+Priority's factory snapshot shows native Status/Project/Agent above Machine.
+Priority View can arrange or hide those fields plus Tab, Pane, Status text and
+raw/clean Terminal title across two lines. Grouped retains fixed machine/project
+headings and one editable agent line. Choices are remembered per mode.
+Identities remain machine-scoped. Users choose
 Herdr's native order independently; Priority rows support either choice. The runtime leaves `ui.agent_panel_sort`
 unchanged and does not read private chrome preferences, infer UI mode from
 lifecycle state, or replace another plugin's projection. Real runtime checks

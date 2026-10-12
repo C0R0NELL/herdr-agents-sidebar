@@ -1,6 +1,6 @@
 # herdr-agents-sidebar
 
-Especificação para outro agente implementar. Atualizada em 11/10/2026.
+Especificação para outro agente implementar. Atualizada em 12/10/2026.
 
 **Estado:** implementação local, com provas isoladas em Herdr 0.9.3. Ativado no ambiente principal por solicitação posterior do usuário em 10/10/2026, usando o checkout e a identidade oficial. Primeira versão `0.1.0` aprovada e publicação pública no GitHub autorizada em 11/10/2026. Os resultados e limites estão em `docs/viabilidade.md`.
 
@@ -108,6 +108,15 @@ Regras visuais:
   Status/Project/Agent na linha 1 e Machine na linha 2. Machine continua Dark blue,
   e as demais cores continuam Default. Grouped e a ativação inicial permanecem
   iguais; novas instalações e Restore defaults usam esse snapshot mais recente.
+- Em 12/10/2026, o usuário pediu os campos nativos Pane, Status text,
+  Terminal title e Terminal title (clean), começando Hidden e com Default em Dark blue.
+  Grouped passa a ter **Edit line**: uma linha editável com Status, Agent, Tab e
+  os quatro novos campos, permitindo ocultar/mostrar e ordenar todos eles, sem
+  mudar os cabeçalhos fixos Machine/Project. Priority mantém **Edit lines** com
+  duas linhas e inclui também Machine/Project. As cores são independentes por
+  campo e por modo. Deixar uma linha em branco antes de Save view nos dois editores.
+  Preservar os defaults e escolhas anteriores; títulos são enviados pelo programa
+  do terminal e não equivalem a descobrir a tarefa exata ou ler conversas.
 - Em pedido posterior em 11/10/2026, o usuário esclareceu que Restore defaults
   e colocar ambos Active em No devem usar o layout nativo padrão completo do
   Herdr, incluindo Machine. Remover os overrides próprios de Rows e Row gap,
@@ -151,11 +160,15 @@ Grouped | Priority
 
 Grouped:
 Active           [Yes/No]
-View             [Agent / Agent+Tab]
+View             [Edit line]
 Machine color    [Default e outras cores]
 Project color    [Default e outras cores]
 Agent color      [Default e outras cores]
 Tab color        [Default e outras cores]
+Pane color       [Default/Dark blue e outras cores]
+Status text color [Default/Dark blue e outras cores]
+Terminal title color [Default/Dark blue e outras cores]
+Terminal title (clean) color [Default/Dark blue e outras cores]
 Show separator   [On/Off]
 
 Priority:
@@ -165,9 +178,14 @@ Machine color    [Default e outras cores]
 Project color    [Default e outras cores]
 Agent color      [Default e outras cores]
 Tab color        [Default e outras cores]
+Pane color       [Default/Dark blue e outras cores]
+Status text color [Default/Dark blue e outras cores]
+Terminal title color [Default/Dark blue e outras cores]
+Terminal title (clean) color [Default/Dark blue e outras cores]
 ```
 
-O editor de View em Priority mostra as duas linhas e os cinco campos disponíveis.
+O editor de View em Grouped mostra uma linha, alternando cada campo entre Hidden
+e Shown com Enter. Em Priority, mostra duas linhas e os nove campos disponíveis.
 Enter muda o campo selecionado entre Hidden, Line 1, Line 2 e Hidden; esquerda e
 direita ajustam sua posição dentro da linha. Save view valida e aplica o conjunto;
 Esc descarta o rascunho sem escrever. Exemplo possível, conforme o usuário:
@@ -180,6 +198,8 @@ Line 2  [Status | Agent | Tab]
 Em pedido posterior em 11/10/2026, o usuário pediu mostrar Line 1 e Line 2
 somente após abrir Edit lines, removendo o resumo da aba Priority. O botão
 Save view fica mais acima no editor, com espaço até as orientações do rodapé.
+Em 12/10/2026, acrescentar uma linha em branco entre os campos e Save view.
+Em janelas curtas, rolar a lista para manter a seleção e o rodapé utilizáveis.
 
 O usuário troca abas com esquerda/direita ou Tab, escolhe campos e cores com
 cima/baixo e Enter, e fecha com Esc. As alterações confirmadas são salvas e
@@ -195,16 +215,16 @@ estado persiste ao navegar, reiniciar ou reinstalar. Colocar um modo em Yes reto
 seu perfil salvo e desativa o outro. Navegar entre abas ou editar a inativa não muda
 o modo ativo nem a apresentação atual. Trocar Active não altera a ordem nativa
 do Herdr. A máquina permanece na identidade mesmo quando escondida em Priority.
-Cada modo salva suas quatro cores e organização separadamente. O schema 4 guarda
+Cada modo salva suas oito cores e organização separadamente. O schema 5 guarda
 `enabled` e o último `mode` selecionado, além de
-View/Show separator em Grouped e listas ordenadas `line1`/`line2` em Priority.
+uma lista ordenada `line1` e Show separator em Grouped, e `line1`/`line2` em Priority.
 
-Preferências antigas dos schemas 1, 2 e 3 são carregadas sem reescrita imediata.
+Preferências antigas dos schemas 1, 2, 3 e 4 são carregadas sem reescrita imediata.
 Cores compartilhadas viram perfis independentes; o modo ativo e o separador de
 Grouped são preservados. Presets antigos de Priority viram as mesmas linhas;
 Grouped mantém Tab quando selecionada e volta à árvore fixa solicitada. Tabs
 já visíveis mantêm sua cor anterior durante a migração. A próxima gravação usa
-schema 4. Preservar pausas do antigo `control.json` ao migrar; depois disso a
+schema 5. Preservar pausas do antigo `control.json` ao migrar; depois disso a
 ativação de Settings é a única fonte de verdade. Recusar formatos ambíguos, campos de outro modo e schemas desconhecidos
 sem sobrescrever os arquivos.
 
@@ -244,13 +264,15 @@ No modo Grouped, para cada lista ordenada atual:
 
 View controla somente o conteúdo visível, sem filtrar agentes ou mudar suas
 identidades. Em Grouped, os cabeçalhos de máquina e projeto continuam presentes
-em ambas as opções. Agent / Tab acrescenta o título nativo da aba depois do nome,
-sem outra linha ou nível na árvore.
+em qualquer View. Edit line escolhe uma única linha de campos nativos abaixo
+deles, sem outro nível na árvore; a migração preserva Agent e Agent/Tab existentes.
 
 No modo Priority, cada agente recebe seu próprio contexto selecionado, sem
 âncoras de árvore. Limpar `has_agent_prefix`, `has_gap` e tokens de campos
 escondidos. Renderizar os campos na ordem salva de cada linha, usando os tokens
-nativos `state_icon` e `tab` nas posições escolhidas. O padrão usa duas linhas:
+nativos `state_icon`, `tab`, `pane`, `state_text`, `terminal_title` e
+`terminal_title_stripped` nas posições escolhidas, sem copiar seus valores para
+metadados do plugin. O padrão usa duas linhas:
 Status/Project/Agent e Machine. Linhas vazias são omitidas; não permitir ambas vazias.
 As duas linhas pertencem ao mesmo agente e focam o mesmo pane. O Herdr fornece
 posição, indicador, ordenação e corte de textos longos. Manter as mesmas chaves
@@ -349,12 +371,13 @@ Instalação no ambiente principal: etapa posterior autorizada pelo usuário em 
 - [x] Não acrescenta `>`; nomes de projetos e agentes têm recuos distintos e consistentes, e ícones nativos ficam alinhados usando o ponto inline aceito pelo usuário.
 - [x] Máquina amarela/negrito, projeto azul/negrito, agente roxo por padrão; opções de cores preservadas e indicador de estado nativo inalterado.
 - [x] Settings tem abas Grouped e Priority; Priority usa duas linhas por agente
-  por padrão, com projeto acima e status, IA e aba abaixo.
+  por padrão, com Status/Project/Agent acima e Machine abaixo.
   A escolha de ordem no Herdr permanece manual.
-- [x] Grouped oferece somente Agent ou Agent / Tab, mantendo a árvore completa.
-- [x] Priority permite montar as duas linhas, esconder e ordenar os cinco campos,
+- [x] Grouped oferece Edit line para mostrar/ocultar e ordenar os sete campos,
+  mantendo a árvore completa e apenas uma linha por agente.
+- [x] Priority permite montar as duas linhas, esconder e ordenar os nove campos,
   incluindo o status nativo. Cancelar preserva os arquivos; uma View vazia é recusada.
-- [x] As quatro cores, incluindo Tab, são independentes por modo e sobrevivem
+- [x] As oito cores são independentes por modo e sobrevivem
   às atualizações e à migração das preferências antigas.
 - [x] Active permite zero ou um modo habilitado; os dois No restauram a sidebar
   nativa e preservam ambos os perfis. Yes retoma somente o modo escolhido. Navegar e editar a aba

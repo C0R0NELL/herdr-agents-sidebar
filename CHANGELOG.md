@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.0 - 2026-10-12
+
+### Breaking changes
+
+- Replace Grouped's Agent/Agent+Tab picker with Edit line, letting users show,
+  hide and reorder seven fields beneath fixed machine/project headings.
+- Save preferences as schema 5 with Grouped line1 and eight colors per mode.
+  Schemas 1-4 migrate without rewriting on read, preserving views, colors and
+  activation. Older versions reject the new format rather than overwriting it.
+
+### Features
+
+- Add native Pane, Status text, Terminal title and Terminal title (clean) to both
+  views, with independent colors. New fields start hidden with Dark blue defaults;
+  existing factory layouts and saved choices remain unchanged.
+- Extend Priority's two-line editor to nine fields while preserving native
+  status, ordering, identities, missing-value handling and local/remote focus.
+  Pane names and terminal titles update natively without copied metadata or caches.
+
+### Fixes and validation
+
+- Add a blank row before Save view, enlarge the Settings popup and scroll field
+  and color lists at shorter heights, keeping selection clear of footer instructions.
+- Verify draft cancellation, field ordering, raw/clean OSC titles, pane renames,
+  per-field colors, short popups and remote mouse focus. Hiding Status/Agent in
+  Grouped retains native agents and headings; installation and upgrade checks
+  preserve durable preferences.
+- Update the specification and documentation for both editors and schema 5.
+  Record the native indentation limits without changing the current Grouped indentation.
+
 ## 0.2.2 - 2026-10-12
 
 - Set the factory Priority layout to native Status/Project/Agent on line 1 and

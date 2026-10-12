@@ -16,8 +16,8 @@ from configuration import Conflict, PLUGIN_ID, Settings, Store
 from runtime import Events, Herdr
 from herdr_harness import HerdrHarness
 from check_visual import capture_svg, check as visual_check, sidebar_lines
-from layout import GROUPED_VIEWS, TOKENS
-from sidebar import OPTIONS
+from layout import GROUPED_FIELDS, GROUPED_VIEWS, SIDEBAR_FIELDS, SIDEBAR_LABELS, TOKENS
+from sidebar import FIELDS as SETTINGS_FIELDS, OPTIONS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -102,7 +102,8 @@ def check_activation():
                                   and any("View" in line and "[Edit lines]" in line for line in lines))
             assert not any("Line 1  [" in line or "Line 2  [" in line for line in lines), "Line settings appeared before opening Edit lines"
             os.write(terminal.master, b"\x1bOB\r")
-            lines = terminal.wait(lambda lines: any("Priority view" in line for line in lines))
+            lines = terminal.wait(lambda lines: any("Priority view" in line for line in lines)
+                                  and any("Save view" in line for line in lines))
             assert any("Line 1  [Status | Project | Agent]" in line for line in lines)
             assert any("Line 2  [Machine]" in line for line in lines)
             save_row = next(y for y, line in enumerate(lines) if "Save view" in line)
@@ -229,7 +230,7 @@ def check_runtime(priority_evidence=None):
             assert opened["type"] == "ok", opened
             terminal.wait(popup_open)
             # Actual keyboard interaction with the plugin's curses popup.
-            os.write(terminal.master, b"\x1bOB" * 6 + b"\r")
+            os.write(terminal.master, b"\x1bOB" * len(SETTINGS_FIELDS) + b"\r")
             wait(lambda: store.load().show_separator is True)
             wait(lambda: tokens(h, "local")[-1].get("has_gap") == "·")
             terminal.wait(lambda lines: any("[On]" in line for line in lines))
@@ -237,7 +238,7 @@ def check_runtime(priority_evidence=None):
             wait(lambda: store.load().show_separator is False)
             wait(lambda: not any(t.get("has_gap") for t in tokens(h, "local")))
             terminal.wait(lambda lines: any("[Off]" in line for line in lines))
-            os.write(terminal.master, b"\x1bOA" * 4 + b"\r")
+            os.write(terminal.master, b"\x1bOA" * (len(SETTINGS_FIELDS)-2) + b"\r")
             terminal.wait(lambda lines: any("Purple" in line for line in lines))
             os.write(terminal.master, b"\x1bOB" * 7 + b"\r")
             wait(lambda: store.load().profile("grouped").machine_color == "#ff79c6")
@@ -392,7 +393,7 @@ def check_runtime(priority_evidence=None):
 # before Project on line 1. Selection ends on Machine (field index 3).
 CUSTOM_PRIORITY_KEYS = (b"\r\x1bOD" + b"\x1bOB" * 2 + b"\r\r"
                         + b"\x1bOB\r\x1bOD")
-SAVE_FROM_MACHINE = b"\x1bOB" * 2 + b"\r"
+SAVE_FROM_MACHINE = b"\x1bOB" * (len(SIDEBAR_FIELDS)-SIDEBAR_FIELDS.index("machine")) + b"\r"
 
 
 def check_views():
@@ -419,14 +420,16 @@ def check_views():
         terminal = h.terminal()
         try:
             for view in GROUPED_VIEWS:
-                current = GROUPED_VIEWS.index(store.load().profile("grouped").view)
                 h.api("local", "plugin.pane.open", {"plugin_id": PLUGIN_ID, "entrypoint": "settings", "focus": True})
                 terminal.wait(popup_open)
                 os.write(terminal.master, b"\x1bOB\r")
-                lines = terminal.wait(lambda lines: any("    Agent / Tab" in line for line in lines))
-                assert not any("Agent / Project" in line for line in lines), "Grouped must offer only two views"
-                delta = GROUPED_VIEWS.index(view) - current
-                os.write(terminal.master, (b"\x1bOB" if delta >= 0 else b"\x1bOA") * abs(delta) + b"\r")
+                lines = terminal.wait(lambda lines: any("Grouped view" in line for line in lines))
+                assert any("Agent line" in line for line in lines)
+                assert not any("Line 2" in line for line in lines), "Grouped must edit only one line"
+                keys = b"\x1bOB" * len(GROUPED_FIELDS)
+                if store.load().profile("grouped").view != view:
+                    keys = b"\x1bOB" * 2 + b"\r" + b"\x1bOB" * (len(GROUPED_FIELDS)-2)
+                os.write(terminal.master, keys + b"\r")
                 terminal.wait(lambda lines: any("Saved" in line for line in lines))
                 assert store.load().profile("grouped").view == view
                 os.write(terminal.master, b"\x1b")
@@ -507,7 +510,7 @@ def check_views():
             terminal.wait(popup_open)
             os.write(terminal.master, b"\x1bOB\r")
             terminal.wait(lambda lines: any("Priority view" in line for line in lines))
-            os.write(terminal.master, b"\x1bOC" * 2 + b"\x1bOB" * 5 + b"\r")
+            os.write(terminal.master, b"\x1bOC" * 2 + b"\x1bOB" * len(SIDEBAR_FIELDS) + b"\r")
             terminal.wait(lambda lines: any("Saved" in line for line in lines))
             assert store.load().profile("priority").line2 == ("agent", "tab", "status")
             os.write(terminal.master, b"\x1b")
@@ -521,7 +524,7 @@ def check_views():
             terminal.wait(popup_open)
             os.write(terminal.master, b"\x1bOB\r")
             terminal.wait(lambda lines: any("Priority view" in line for line in lines))
-            os.write(terminal.master, b"\r\r\x1bOD" + b"\x1bOB" * 5 + b"\r")
+            os.write(terminal.master, b"\r\r\x1bOD" + b"\x1bOB" * len(SIDEBAR_FIELDS) + b"\r")
             terminal.wait(lambda lines: any("Saved" in line for line in lines))
             assert store.load().profile("priority").line1 == ("machine", "status", "project")
             os.write(terminal.master, b"\x1b")
@@ -535,7 +538,7 @@ def check_views():
             os.write(terminal.master, b"\x1bOB\r")
             terminal.wait(lambda lines: any("Priority view" in line for line in lines))
             os.write(terminal.master, b"\r\r\x1bOB\r" + b"\x1bOB" * 2
-                     + b"\r\r\x1bOB\r\r\x1bOB\r")
+                     + b"\r\r\x1bOB\r\r" + b"\x1bOB" * (len(SIDEBAR_FIELDS)-4) + b"\r")
             terminal.wait(lambda lines: any("Saved" in line for line in lines))
             assert store.load().profile("priority").line1 == ()
             assert store.load().profile("priority").line2 == ("tab",)
@@ -563,7 +566,7 @@ def check_views():
             os.write(terminal.master, b"\x1bOB\r")
             terminal.wait(lambda lines: any("Priority view" in line for line in lines))
             before = store.preferences.read_bytes(), config.read_bytes()
-            os.write(terminal.master, b"\x1bOB" * 2 + b"\r" + b"\x1bOB" * 3 + b"\r")
+            os.write(terminal.master, b"\x1bOB" * 2 + b"\r" + b"\x1bOB" * (len(SIDEBAR_FIELDS)-2) + b"\r")
             terminal.wait(lambda lines: any("Choose at least one field" in line for line in lines))
             assert (store.preferences.read_bytes(), config.read_bytes()) == before
             os.write(terminal.master, b"\x1b")
@@ -577,6 +580,155 @@ def check_views():
             print("PASS: fixed Grouped tree, optional native Tab, Priority draft/cancel/order, movable native Status and remote focus")
         finally:
             terminal.close()
+
+
+def check_native_fields():
+    """Edit native details in both modes; names, titles, state and focus stay native."""
+    with HerdrHarness() as h:
+        h.connect_remote()
+        agents = {}
+        for machine in ("local", "remote"):
+            h.start(machine, width=110, rows="")
+            agents[machine] = h.populate(machine)
+            for index, (pane, _) in enumerate(agents[machine]):
+                if machine == "remote":
+                    h.api(machine, "agent.rename", {"target": pane, "name": f"agente0{index+4}"})
+                h.api(machine, "pane.rename", {"pane_id": pane, "label": f"{machine}-pane{index+1}"})
+                h.api(machine, "pane.send_text", {"pane_id": pane,
+                      "text": f"printf '\\033]0;⠋ {machine}-task{index+1}\\007'\n"})
+                h.api(machine, "pane.report_agent", {"pane_id": pane, "source": "test:fixture",
+                                                      "agent": "codex", "state": "working", "seq": 1})
+        store = Store(h.root / "local/config/herdr/plugins/config" / PLUGIN_ID,
+                      h.root / "local/state/herdr/plugins" / PLUGIN_ID)
+        config = h.config_path("local")
+        original = config.read_bytes()
+        store.save(Settings().with_active("grouped"))
+        h.command("local", "plugin", "link", str(ROOT / "herdr-plugin.toml"), "--enabled")
+        activate_by_navigation(h)
+        terminal = h.terminal(width=200, height=65)
+        try:
+            terminal.wait(lambda lines: sum("agente0" in line[:109] for line in lines) == 6)
+            h.api("local", "plugin.pane.open", {"plugin_id": PLUGIN_ID, "entrypoint": "settings", "focus": True})
+            terminal.wait(popup_open)
+            os.write(terminal.master, b"\x1bOB\r")
+            lines = terminal.wait(lambda lines: any("Grouped view" in line for line in lines))
+            assert not any("Line 2" in line for line in lines)
+            for name in ("pane", "status_text", "terminal_title", "terminal_title_stripped"):
+                assert any(SIDEBAR_LABELS[name] in line and "Hidden" in line for line in lines)
+            save_y = next(y for y, line in enumerate(lines) if "Save view" in line)
+            save_x = lines[save_y].index("Save view") - 2
+            assert not lines[save_y-1][save_x:save_x+40].strip(), "Missing blank line before Save view"
+            before = store.preferences.read_bytes(), config.read_bytes()
+            # Show all details, then place Pane before Agent in the same fixed tree.
+            keys = b"\x1bOB" * 2 + b"\r" + (b"\x1bOB\r" * 4) + b"\x1bOA" * 3 + b"\x1bOD" * 2
+            os.write(terminal.master, keys)
+            terminal.wait(lambda lines: any("Agent line  [Status | Pane | Agent | Tab" in line for line in lines))
+            assert (store.preferences.read_bytes(), config.read_bytes()) == before
+            os.write(terminal.master, b"\x1b")
+            terminal.wait(popup_open)
+            assert (store.preferences.read_bytes(), config.read_bytes()) == before
+            os.write(terminal.master, b"\r")
+            terminal.wait(lambda lines: any("Grouped view" in line for line in lines))
+            os.write(terminal.master, keys + b"\x1bOB" * (len(GROUPED_FIELDS)-3) + b"\r")
+            terminal.wait(lambda lines: any("Saved" in line for line in lines))
+            assert store.load().grouped.line1 == ("status", "pane", "agent", "tab", "status_text", "terminal_title", "terminal_title_stripped")
+            os.write(terminal.master, b"\x1b")
+
+            def rendered(lines):
+                rows = [(y, text) for y, text in sidebar_lines(lines, 110) if "agente0" in text]
+                return (not popup_open(lines) and len(rows) == 6
+                        and all("-pane" in text and "working" in text and text.count("-task") == 2 for _, text in rows))
+
+            lines = terminal.wait(rendered)
+            assert sum("projeto" in text for _, text in sidebar_lines(lines, 110)) == 4
+            for y, text in sidebar_lines(lines, 110):
+                if "agente0" in text:
+                    assert text.index("-pane") < text.index("agente0") < text.index("working")
+                    for value in ("working", "⠋", "-pane", "-task"):
+                        assert terminal.screen.buffer[y][text.index(value)].fg == "6272a4"
+            grouped = store.load().grouped
+            # Rename a native Pane; the plugin must not copy or cache its name.
+            h.api("remote", "pane.rename", {"pane_id": agents["remote"][0][0], "label": "remote-reviewer"})
+            lines = terminal.wait(lambda lines: any("remote-reviewer" in line[:109] and "agente04" in line[:109] for line in lines))
+            remote_y = next(y for y, line in enumerate(lines) if "remote-reviewer" in line[:109])
+            terminal.click(lines[remote_y].index("remote-reviewer"), remote_y)
+            wait(lambda: h.api("remote", "session.snapshot")["snapshot"]["focused_pane_id"] == agents["remote"][0][0])
+            # Server focus can precede the client's machine transition/redraw.
+            lines = terminal.wait(lambda lines: any("remote-reviewer" in line[110:] for line in lines))
+            local_y = next(y for y, line in enumerate(lines) if "local-pane1" in line[:109])
+            terminal.click(lines[local_y].index("local-pane1"), local_y)
+            wait(lambda: h.api("local", "session.snapshot")["snapshot"]["focused_pane_id"] == agents["local"][0][0])
+            terminal.wait(lambda lines: any("local-pane1" in line[110:] for line in lines))
+            h.api("local", "plugin.pane.open", {"plugin_id": PLUGIN_ID, "entrypoint": "settings", "focus": True})
+            terminal.wait(popup_open)
+            os.write(terminal.master, b"\x1bOC\r\x1bOB\r")
+            lines = terminal.wait(lambda lines: any("Priority view" in line for line in lines)
+                                  and any("Save view" in line for line in lines))
+            save_y = next(y for y, line in enumerate(lines) if "Save view" in line)
+            save_x = lines[save_y].index("Save view") - 2
+            assert not lines[save_y-1][save_x:save_x+40].strip()
+            # Native Pane/State text on line 1; raw/clean titles on line 2.
+            os.write(terminal.master, b"\x1bOB" * 5 + b"\r\x1bOB\r\x1bOB\r\r\x1bOB\r\r\x1bOB\r")
+            terminal.wait(lambda lines: any("Saved" in line for line in lines))
+            selected = store.load()
+            assert selected.priority.line1 == ("status", "project", "agent", "pane", "status_text")
+            assert selected.priority.line2 == ("machine", "terminal_title", "terminal_title_stripped")
+            assert selected.grouped == grouped
+            os.write(terminal.master, b"\x1b")
+            lines = terminal.wait(lambda lines: not popup_open(lines)
+                                  and sum("agente0" in line[:109] and "working" in line[:109] for line in lines) == 6
+                                  and sum(line[:109].count("-task") == 2 for line in lines) == 6)
+            assert all(len(h.api(machine, "session.snapshot")["snapshot"]["agents"]) == 3 for machine in ("local", "remote"))
+            assert tomllib.loads(config.read_text())["ui"]["agent_panel_sort"] == "spaces"
+            # Existing links may still open at the older height. Scroll fields,
+            # Save and colors without colliding with the footer in an 18-row popup.
+            h.api("local", "plugin.pane.open", {"plugin_id": PLUGIN_ID, "entrypoint": "settings", "focus": True, "height": 18})
+            terminal.wait(popup_open)
+            os.write(terminal.master, b"\x1bOB\r")
+            terminal.wait(lambda lines: any("Priority view" in line for line in lines))
+            os.write(terminal.master, b"\x1bOA")
+            lines = terminal.wait(lambda lines: any("Save view" in line for line in lines)
+                                  and any("Terminal title (clean)" in line for line in lines))
+            save_y = next(y for y, line in enumerate(lines) if "Save view" in line)
+            save_x = lines[save_y].index("Save view") - 2
+            assert not lines[save_y-1][save_x:save_x+40].strip()
+            hint_y = next(y for y, line in enumerate(lines) if "Enter cycles" in line)
+            assert hint_y-save_y >= 3
+            os.write(terminal.master, b"\x1b")
+            terminal.wait(popup_open)
+            os.write(terminal.master, b"\x1bOB" * 8)
+            terminal.wait(lambda lines: any("Terminal title (clean) color" in line for line in lines))
+            os.write(terminal.master, b"\r\x1bOA\r")
+            terminal.wait(lambda lines: any("Saved" in line for line in lines))
+            assert store.load().priority.terminal_title_stripped_color == "#6272a4"
+            assert store.load().grouped == grouped
+            os.write(terminal.master, b"\x1b")
+            # Active is scrolled out here; wait for the native popup frame to close.
+            terminal.wait(lambda lines: not any("Agents Sidebar settings" in line for line in lines))
+            # Grouped can hide Status and Agent too, without losing native identities.
+            h.api("local", "plugin.pane.open", {"plugin_id": PLUGIN_ID, "entrypoint": "settings", "focus": True})
+            terminal.wait(popup_open)
+            os.write(terminal.master, b"\x1bOD\r\x1bOB\r")
+            terminal.wait(lambda lines: any("Grouped view" in line for line in lines))
+            os.write(terminal.master, b"\r" + b"\x1bOB\r" * 2 + b"\x1bOB" * 2
+                     + b"\r" + b"\x1bOB\r" * 3)
+            terminal.wait(lambda lines: any("Saved" in line for line in lines))
+            assert store.load().grouped.line1 == ("pane",)
+            os.write(terminal.master, b"\x1b")
+            expected = ("local-pane1", "local-pane2", "local-pane3", "remote-reviewer", "remote-pane2", "remote-pane3")
+            lines = terminal.wait(lambda lines: not popup_open(lines)
+                                  and all(any(text.rstrip().endswith(name) for _, text in sidebar_lines(lines, 110)) for name in expected)
+                                  and not any("agente0" in line[:109] for line in lines)
+                                  and sum("projeto" in text for _, text in sidebar_lines(lines, 110)) == 4
+                                  and sum("Local" in text or "machine02" in text for _, text in sidebar_lines(lines, 110)) == 2)
+            assert sum("projeto" in text for _, text in sidebar_lines(lines, 110)) == 4
+            wait(lambda: all(not token.get("has_agent") for machine in ("local", "remote") for token in tokens(h, machine)))
+            assert all(len(h.api(machine, "session.snapshot")["snapshot"]["agents"]) == 3 for machine in ("local", "remote"))
+            h.command("local", "plugin", "disable", PLUGIN_ID)
+            wait(lambda: worker_stopped(store.state) and config.read_bytes() == original)
+        finally:
+            terminal.close()
+    print("PASS: Grouped Edit line, native Pane/state/raw and clean titles, reordering/cancel, blank Save spacing and remote focus")
 
 
 def check_profiles():
@@ -690,11 +842,11 @@ def check_profiles():
             terminal.wait(lambda lines: any("Machine color" in line and "[Default]" in line for line in lines)
                           and any("Active" in line and "[No]" in line for line in lines))
             # Edit an inactive profile while both No without publishing rows or tokens.
-            os.write(terminal.master, b"\x1bOB" * 6 + b"\r")
+            os.write(terminal.master, b"\x1bOB" * len(SETTINGS_FIELDS) + b"\r")
             terminal.wait(lambda lines: any("Show separator" in line and "[On]" in line for line in lines))
             assert not store.load().enabled and config.read_bytes() == original
             assert worker_stopped(store.state)
-            os.write(terminal.master, b"\r" + b"\x1bOA" * 6 + b"\r")
+            os.write(terminal.master, b"\r" + b"\x1bOA" * len(SETTINGS_FIELDS) + b"\r")
             wait(lambda: store.load().enabled and store.load().mode == "grouped")
             terminal.wait(lambda lines: any("Active" in line and "[Yes]" in line for line in lines))
             os.write(terminal.master, b"\x1bOC")
@@ -786,6 +938,7 @@ def main():
     check_activation()
     check_runtime(args.priority_evidence)
     check_views()
+    check_native_fields()
     check_profiles()
     check_independent_installations()
     for width in (18, 22, 36):

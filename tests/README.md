@@ -10,7 +10,7 @@ under temporary XDG roots. It checks the runtime, settings popup, native rendere
 mouse routing and cleanup. Runtime checks exercise Grouped/Priority mode changes
 with explicit saved active layouts and worker startup by native navigation, without an Apply action,
 independently of native order, two-line entries, configured colors and remote
-focus from either line. View checks exercise both Grouped choices with fixed
+focus from either line. View checks edit Grouped's single agent line with fixed
 headings and native tabs, then build ordered Priority lines in the real popup.
 Draft/cancel behavior, native status repositioning, colors, unchanged ordering
 and local/remote mouse focus are checked. A Tab-only view preserves every native
@@ -23,6 +23,10 @@ and Restore defaults resetting both profiles to No. The Restore regression
 starts from native-only rows that omit Machine and requires its native context
 to reappear in the open client with multiple machines. Line summaries appear only
 after opening Edit lines; Save view remains separated from the footer instructions.
+Native detail checks edit/reorder/cancel Pane, Status text and both terminal titles
+through the real Grouped and Priority popups. OSC title fixtures verify raw/clean
+rendering, per-field Dark blue defaults and native rename updates, with remote
+mouse focus and a blank row before Save view. No agent conversation is inspected.
 Two active installations sharing a server use different metadata keys. The check
 changes remote Settings, observes both native sidebars through two remote refresh
 intervals, and disables one installation without clearing the other's layout.

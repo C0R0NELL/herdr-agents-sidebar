@@ -13,7 +13,7 @@ import time
 import tomllib
 import uuid
 
-from layout import DEFAULT_PRIORITY_LINES, GROUPED_VIEWS, MODES, SIDEBAR_FIELDS, TOKENS
+from layout import DEFAULT_PRIORITY_LINES, GROUPED_FIELDS, GROUPED_VIEWS, MODES, NATIVE_FIELDS, SIDEBAR_FIELDS, TOKENS
 
 PLUGIN_ID = "c0r0nell.agents-sidebar"
 SOURCE = "plugin:" + PLUGIN_ID
@@ -26,14 +26,16 @@ DRACULA_COLORS = {
     "Red": "#ff5555", "Orange": "#ffb86c",
 }
 DARK_BLUE = "#6272a4"
-DEFAULT_COLORS = (DRACULA_COLORS["Yellow"], "#89b4fa", DRACULA_COLORS["Purple"], DARK_BLUE)
+COLOR_FIELDS = ("machine", "project", "agent", *NATIVE_FIELDS)
+DEFAULT_COLORS = (DRACULA_COLORS["Yellow"], "#89b4fa", DRACULA_COLORS["Purple"], *(DARK_BLUE for _ in NATIVE_FIELDS))
+SETTINGS_SCHEMA = 5
 # Factory snapshot: fixed Grouped tree, no separator;
 # Priority shows native Status/Project/Agent above Dark blue machines.
 FACTORY_PRIORITY_LINES = (("status", "project", "agent"), ("machine",))
 LEGACY_VIEWS = ("agent", "agent/project", "agent/project/machine", "agent/project/machine/tab")
 PROFILE_FIELDS = {
-    "grouped": {"machine_color", "project_color", "agent_color", "tab_color", "view", "show_separator"},
-    "priority": {"machine_color", "project_color", "agent_color", "tab_color", "line1", "line2"},
+    "grouped": {*(name + "_color" for name in COLOR_FIELDS), "line1", "show_separator"},
+    "priority": {*(name + "_color" for name in COLOR_FIELDS), "line1", "line2"},
 }
 
 
@@ -56,29 +58,35 @@ class ModeSettings:
     project_color: str = "default"
     agent_color: str = "default"
     tab_color: str = "default"
+    pane_color: str = "default"
+    status_text_color: str = "default"
+    terminal_title_color: str = "default"
+    terminal_title_stripped_color: str = "default"
     show_separator: bool = False
-    view: str = "agent"
     line1: tuple = DEFAULT_PRIORITY_LINES[0]
     line2: tuple = DEFAULT_PRIORITY_LINES[1]
+
+    @property
+    def view(self):
+        """Retain read access to the two original Grouped presets."""
+        return "agent" if self.line1 == ("status", "agent") else (
+            "agent/tab" if self.line1 == ("status", "agent", "tab") else "custom")
 
     def normalized(self):
         if type(self.show_separator) is not bool:
             raise ValueError("Show separator must be On or Off")
-        if self.view not in GROUPED_VIEWS:
-            raise ValueError("Choose a supported sidebar View")
         lines = (self.line1, self.line2)
         if any(not isinstance(line, (list, tuple)) for line in lines):
-            raise ValueError("Priority lines must be lists of fields")
+            raise ValueError("View lines must be lists of fields")
         names = tuple(name for line in lines for name in line)
         if not names:
-            raise ValueError("Choose at least one field for the Priority view")
+            raise ValueError("Choose at least one field for the view")
         if any(not isinstance(name, str) or name not in SIDEBAR_FIELDS for name in names):
-            raise ValueError("Choose supported Priority fields")
+            raise ValueError("Choose supported view fields")
         if len(set(names)) != len(names):
-            raise ValueError("Each field can appear only once in the Priority view")
-        return replace(self, machine_color=color(self.machine_color),
-                       project_color=color(self.project_color), agent_color=color(self.agent_color),
-                       tab_color=color(self.tab_color), line1=tuple(self.line1), line2=tuple(self.line2))
+            raise ValueError("Each field can appear only once in the view")
+        return replace(self, **{name + "_color": color(getattr(self, name + "_color")) for name in COLOR_FIELDS},
+                       line1=tuple(self.line1), line2=tuple(self.line2))
 
 
 @dataclass(frozen=True)
@@ -86,7 +94,7 @@ class Settings:
     # Retain the selected profile when neither mode is enabled.
     mode: str = "grouped"
     enabled: bool = False
-    grouped: ModeSettings = field(default_factory=ModeSettings)
+    grouped: ModeSettings = field(default_factory=lambda: ModeSettings(line1=("status", "agent"), line2=()))
     priority: ModeSettings = field(default_factory=lambda: ModeSettings(
         machine_color=DARK_BLUE, line1=FACTORY_PRIORITY_LINES[0], line2=FACTORY_PRIORITY_LINES[1]))
 
@@ -98,6 +106,11 @@ class Settings:
 
     def with_profile(self, mode, **changes):
         self.profile(mode)
+        if "view" in changes and mode == "grouped":
+            view = changes.pop("view")
+            if view not in GROUPED_VIEWS or "line1" in changes:
+                raise ValueError("Choose a supported legacy Grouped View")
+            changes["line1"] = ("status", "agent") + (("tab",) if view == "agent/tab" else ())
         if set(changes) - PROFILE_FIELDS[mode]:
             raise ValueError("These settings do not belong to this mode")
         return replace(self, **{mode: replace(self.profile(mode), **changes)})
@@ -113,7 +126,7 @@ class Settings:
         profile = self.profile()
         if self.mode == "priority":
             return profile.line1 + profile.line2
-        return ("machine", "project", "status", "agent") + (("tab",) if profile.view == "agent/tab" else ())
+        return ("machine", "project") + profile.line1
 
     @property
     def show_separator(self):
@@ -126,26 +139,28 @@ class Settings:
             raise ValueError("Active must be Yes or No")
         if not isinstance(self.grouped, ModeSettings) or not isinstance(self.priority, ModeSettings):
             raise ValueError("Each mode must have its own settings profile")
-        return replace(self, grouped=self.grouped.normalized(), priority=self.priority.normalized())
+        grouped, priority = self.grouped.normalized(), self.priority.normalized()
+        if grouped.line2 or any(name not in GROUPED_FIELDS for name in grouped.line1):
+            raise ValueError("Grouped keeps Machine and Project headings and one agent line")
+        return replace(self, grouped=grouped, priority=priority)
 
     def rows(self, *, token_names=None):
         if not self.enabled:
             raise ValueError("Both modes are inactive; restore the native sidebar")
         profile = self.profile()
-        colors = [fallback if value == "default" else value for value, fallback in
-                  zip((profile.machine_color, profile.project_color, profile.agent_color, profile.tab_color), DEFAULT_COLORS)]
+        colors = {name: fallback if (value := getattr(profile, name + "_color")) == "default" else value
+                  for name, fallback in zip(COLOR_FIELDS, DEFAULT_COLORS)}
         names = dict(zip(TOKENS, TOKENS)) if token_names is None else token_names
-        def token(name, index, bold):
-            return {"token": "$" + names[name], "fg": colors[index], "bold": bold}
+        def token(name, field, bold):
+            return {"token": "$" + names[name], "fg": colors[field], "bold": bold}
+        tokens = {"status": "state_icon", "agent": token("has_agent", "agent", False),
+                  "machine": token("has_machine", "machine", True), "project": token("has_project", "project", True),
+                  **{name: {"token": native, "fg": colors[name], "bold": False} for name, native in NATIVE_FIELDS.items()}}
         if self.mode == "priority":
-            tokens = {"status": "state_icon", "agent": token("has_agent", 2, False),
-                      "tab": {"token": "tab", "fg": colors[3], "bold": False},
-                      "machine": token("has_machine", 0, True), "project": token("has_project", 1, True)}
             return [[tokens[name] for name in line] for line in (profile.line1, profile.line2) if line]
-        tab = [{"token": "tab", "fg": colors[3], "bold": False}] if profile.view == "agent/tab" else []
-        return [[token("has_machine", 0, True)], [token("has_project", 1, True)],
-                [token("has_agent_prefix", 2, False), "state_icon", token("has_agent", 2, False)] + tab,
-                [token("has_gap", 0, True)]]
+        return [[tokens["machine"]], [tokens["project"]],
+                [token("has_agent_prefix", "agent", False)] + [tokens[name] for name in profile.line1],
+                [token("has_gap", "machine", True)]]
 
 
 def legacy_profile(data, mode):
@@ -160,7 +175,7 @@ def legacy_profile(data, mode):
     if "tab" in view and data["tab_color"] == "default":
         data["tab_color"] = DEFAULT_COLORS[2]
     if mode == "grouped":
-        return ModeSettings(**data, view="agent/tab" if "tab" in view else "agent")
+        return ModeSettings(**data, line1=("status", "agent") + (("tab",) if "tab" in view else ()), line2=())
     if "show_separator" in data and type(data["show_separator"]) is not bool:
         raise ValueError("Show separator must be On or Off")
     data.pop("show_separator", None)  # This field never affected Priority.
@@ -257,7 +272,7 @@ class Store:
             return Settings(enabled=self.legacy_active(default=False))
         data = tomllib.loads(self.preferences.read_text())
         schema = data.pop("schema", None)
-        if type(schema) is not int or schema not in (1, 2, 3, 4):
+        if type(schema) is not int or schema not in (1, 2, 3, 4, SETTINGS_SCHEMA):
             raise Conflict("Unsupported settings schema; preferences were preserved")
         try:
             if schema < 4:
@@ -278,11 +293,21 @@ class Store:
                 profiles = {}
                 for mode in MODES:
                     values = data.pop(mode, {})
-                    if not isinstance(values, dict) or set(values) - PROFILE_FIELDS[mode]:
+                    allowed = PROFILE_FIELDS[mode] if schema >= 5 else (
+                        {"machine_color", "project_color", "agent_color", "tab_color"}
+                        | ({"view", "show_separator"} if mode == "grouped" else {"line1", "line2"}))
+                    if not isinstance(values, dict) or set(values) - allowed:
                         raise Conflict("Unknown or misplaced profile fields; preferences were preserved")
-                    if schema == 4:
+                    if schema < 5 and mode == "grouped":
+                        view = values.pop("view", "agent")
+                        if view not in GROUPED_VIEWS:
+                            raise Conflict("Unknown legacy View; preferences were preserved")
+                        values.update(line1=("status", "agent") + (("tab",) if view == "agent/tab" else ()), line2=())
+                    if schema >= 4:
                         defaults = asdict(Settings().profile(mode))
                         values = {**{key: defaults[key] for key in PROFILE_FIELDS[mode]}, **values}
+                    if mode == "grouped":
+                        values["line2"] = ()
                     profiles[mode] = ModeSettings(**values)
                 grouped, priority = profiles["grouped"], profiles["priority"]
             return Settings(**data, grouped=grouped, priority=priority).normalized()
@@ -290,7 +315,7 @@ class Store:
             raise Conflict("Unknown or malformed settings fields; preferences were preserved") from error
 
     def legacy_active(self, *, default=True):
-        """Read the old pause receipt only until preferences are saved as schema 4."""
+        """Read the old pause receipt only until preferences have explicit activation."""
         path = self.state / "control.json"
         if not path.exists():
             return default
@@ -307,10 +332,10 @@ class Store:
         private_directory(self.config)
         with lock(self.config / "settings.lock"):
             self.load()  # Refuse to replace a newer schema.
-            text = "schema = 4\n" + f"mode = {toml(settings.mode)}\nenabled = {toml(settings.enabled)}\n"
+            text = f"schema = {SETTINGS_SCHEMA}\n" + f"mode = {toml(settings.mode)}\nenabled = {toml(settings.enabled)}\n"
             for mode in MODES:
                 values = asdict(settings.profile(mode))
-                for name in (("line1", "line2") if mode == "grouped" else ("view", "show_separator")):
+                for name in (("line2",) if mode == "grouped" else ("show_separator",)):
                     values.pop(name)
                 text += f"\n[{mode}]\n" + "".join(f"{k} = {toml(v)}\n" for k, v in values.items())
             atomic_write(self.preferences, text)
