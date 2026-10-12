@@ -4,9 +4,9 @@ Implemented on 2026-10-11 after the user requested explicit first activation and
 adopted their configured profiles as the factory snapshot.
 
 Settings in configuration.py defines the immutable factory defaults: Grouped has
-the fixed tree, Agent view and separator Off. The user's later snapshot on the same
-day replaces Priority with Project/Machine on line 1, Status/Agent on line 2 and
-Dark blue machines. Other colors retain the Yellow/Blue/Purple/Dark blue default
+the fixed tree, Agent view and separator Off. The latest Priority snapshot uses
+native Status/Project/Agent on line 1 and Machine on line 2, with Dark blue machines.
+Other colors retain the Yellow/Blue/Purple/Dark blue default
 palette. Both modes start inactive. No personal paths, identities or state are included. A fresh installer
 registers the plugin enabled in Herdr; Settings is available immediately, while
 startup and navigation leave the native sidebar intact until Active becomes Yes.

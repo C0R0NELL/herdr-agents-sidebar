@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2 - 2026-10-12
+
+- Set the factory Priority layout to native Status/Project/Agent on line 1 and
+  Machine on line 2, retaining Dark blue machines and the Grouped defaults.
+- Use the new snapshot for fresh installations and Restore defaults, with both
+  modes initially inactive; preserve saved profiles and activation during updates.
+- Align factory rendering, colors, Settings and preview-capture checks with the
+  layout, and test installation metadata keys independently of factory field order.
+  Update the specification and development/validation documentation.
+
 ## 0.2.1 - 2026-10-11
 
 ### Fixes

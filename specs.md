@@ -41,8 +41,9 @@ Regras visuais:
 - Em 11/10/2026, o usuário pediu Mode como primeira opção de Settings, com
   Grouped/Priority. Grouped mantém a árvore já aprovada. Priority inicialmente
   colocou status/projeto acima e IA abaixo. Um snapshot posterior usou Project
-  na primeira linha e Status/Agent/Tab na segunda; o mais recente substitui esse
-  default por Project/Machine na primeira e Status/Agent na segunda.
+  na primeira linha e Status/Agent/Tab na segunda; outro adotou Project/Machine
+  na primeira e Status/Agent na segunda. O padrão mais recente usa
+  Status/Project/Agent na primeira e Machine na segunda.
   Preservar as cores de projeto e agente e o status nativo. Esse formato foi
   escolhido pelo usuário em 11/10/2026. Não renderizar cabeçalhos separados,
   recuos de árvore ou separadores entre máquinas nesse modo. Show separator
@@ -56,7 +57,7 @@ Regras visuais:
   em qual ordem; cada campo pode aparecer uma vez. O indicador Status é o token
   nativo, incluindo suas cores e estados, e pode ser movido ou escondido. Exigir
   pelo menos um campo no conjunto; uma linha vazia é omitida. Manter o layout
-  padrão do snapshot mais recente (Project/Machine acima, Status/Agent abaixo), sem impor presets.
+  padrão do snapshot mais recente (Status/Project/Agent acima, Machine abaixo), sem impor presets.
 - As quatro cores (Machine, Project, Agent e Tab) são independentes por modo.
   Tab começa em Dark blue (`#6272a4`), conforme pedido posterior do usuário;
   os três defaults anteriores continuam iguais.
@@ -103,6 +104,10 @@ Regras visuais:
   as outras três cores continuam Default. Esse snapshot substitui o anterior
   para novas instalações e Restore defaults, mantendo ambos Active em No.
   Configurações já salvas continuam preservadas.
+- Na revisão seguinte, o usuário escolheu um novo default somente para Priority:
+  Status/Project/Agent na linha 1 e Machine na linha 2. Machine continua Dark blue,
+  e as demais cores continuam Default. Grouped e a ativação inicial permanecem
+  iguais; novas instalações e Restore defaults usam esse snapshot mais recente.
 - Em pedido posterior em 11/10/2026, o usuário esclareceu que Restore defaults
   e colocar ambos Active em No devem usar o layout nativo padrão completo do
   Herdr, incluindo Machine. Remover os overrides próprios de Rows e Row gap,
@@ -246,7 +251,7 @@ No modo Priority, cada agente recebe seu próprio contexto selecionado, sem
 âncoras de árvore. Limpar `has_agent_prefix`, `has_gap` e tokens de campos
 escondidos. Renderizar os campos na ordem salva de cada linha, usando os tokens
 nativos `state_icon` e `tab` nas posições escolhidas. O padrão usa duas linhas:
-Project/Machine e Status/Agent. Linhas vazias são omitidas; não permitir ambas vazias.
+Status/Project/Agent e Machine. Linhas vazias são omitidas; não permitir ambas vazias.
 As duas linhas pertencem ao mesmo agente e focam o mesmo pane. O Herdr fornece
 posição, indicador, ordenação e corte de textos longos. Manter as mesmas chaves
 compostas e a publicação incremental nos dois modos, mesmo quando Agent,

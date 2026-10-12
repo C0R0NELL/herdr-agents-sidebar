@@ -183,8 +183,8 @@ class ConfigurationTests(unittest.TestCase):
         self.assertFalse(factory.enabled)
         self.assertEqual(factory.grouped.view, "agent")
         self.assertFalse(factory.grouped.show_separator)
-        self.assertEqual(factory.priority.line1, ("project", "machine"))
-        self.assertEqual(factory.priority.line2, ("status", "agent"))
+        self.assertEqual(factory.priority.line1, ("status", "project", "agent"))
+        self.assertEqual(factory.priority.line2, ("machine",))
         for mode in ("grouped", "priority"):
             profile = factory.profile(mode)
             for name in ("machine_color", "project_color", "agent_color", "tab_color"):
@@ -201,7 +201,8 @@ class ConfigurationTests(unittest.TestCase):
         import re
         for name in first_keys.values():
             self.assertIsNotNone(re.fullmatch(r"[A-Za-z0-9_-]{1,32}", name))
-        preferences = Settings().with_active("priority")
+        # Test key mapping with a fixed view, independently of the factory layout.
+        preferences = Settings().with_profile("priority", line1=("project",), line2=("agent",)).with_active("priority")
         first.save(preferences)
         reopened = Store(first.config, first.state)
         self.assertEqual(reopened.token_names(), first_keys)

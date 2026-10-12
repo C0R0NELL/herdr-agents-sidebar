@@ -35,7 +35,7 @@ activates the chosen mode, accepting reversible native-only rows. Restart preser
 active and inactive choices. Restore defaults resets both customized profiles to
 the factory snapshot with both inactive. Offline installer checks verify startup
 respects saved activation, applying active layouts before further navigation.
-The latest factory snapshot uses Project/Machine above Status/Agent in Priority,
+The latest factory snapshot uses native Status/Project/Agent above Machine in Priority,
 with Dark blue machines; its actual activation and Restore checks passed after
 the user's snapshot update. The earlier README images remain unchanged by request.
 Herdr 0.9.3 has no synchronous post-install hook; saved active modes start at

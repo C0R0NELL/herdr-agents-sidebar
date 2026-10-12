@@ -62,8 +62,8 @@ def capture(output):
                                 and sum("machine02" in text for _, text in rows) == 1)
                     # Wait for remote reconciliation and the client redraw too;
                     # the old layout can briefly contain the same six agent names.
-                    return all("tab0" not in text and lines[y-1][:width].strip().startswith("project")
-                               and ("Local" in lines[y-1][:width] or "machine02" in lines[y-1][:width])
+                    return all("tab0" not in text and "project" in text
+                               and lines[y+1][:width-1].strip() in ("Local", "machine02")
                                for y, text in entries)
                 lines = terminal.wait(rendered)
                 if mode == "priority":
@@ -81,7 +81,8 @@ def capture(output):
                     if "agent0" in text:
                         assert terminal.screen.buffer[y][text.index("agent0")].fg == DEFAULT_COLORS[2][1:]
                         if mode == "priority":
-                            assert "project" in lines[y-1][:width] and "tab0" not in text
+                            assert "project" in text and "tab0" not in text
+                            assert text.index("project") < text.index("agent0")
                             assert "Local" not in text and "machine02" not in text
                     if mode == "priority" and ("Local" in text or "machine02" in text):
                         machine_name = "Local" if "Local" in text else "machine02"

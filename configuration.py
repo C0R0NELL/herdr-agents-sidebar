@@ -27,9 +27,9 @@ DRACULA_COLORS = {
 }
 DARK_BLUE = "#6272a4"
 DEFAULT_COLORS = (DRACULA_COLORS["Yellow"], "#89b4fa", DRACULA_COLORS["Purple"], DARK_BLUE)
-# Factory snapshot approved on 2026-10-11: fixed Grouped tree, no separator;
-# Priority shows Project/Machine above native Status/Agent, with Dark blue machines.
-FACTORY_PRIORITY_LINES = (("project", "machine"), ("status", "agent"))
+# Factory snapshot: fixed Grouped tree, no separator;
+# Priority shows native Status/Project/Agent above Dark blue machines.
+FACTORY_PRIORITY_LINES = (("status", "project", "agent"), ("machine",))
 LEGACY_VIEWS = ("agent", "agent/project", "agent/project/machine", "agent/project/machine/tab")
 PROFILE_FIELDS = {
     "grouped": {"machine_color", "project_color", "agent_color", "tab_color", "view", "show_separator"},

@@ -18,7 +18,7 @@ agent, and a completely empty draft is rejected without writes.
 Profile checks browse and edit the inactive tab, preserving active config bytes,
 then activate/deactivate each mode and check its own colors, view and native status.
 Factory checks begin with both modes No, activate from the actual Settings popup,
-verify Project/Machine above Status/Agent with Dark blue machines, and exercise Restart preserving activation
+verify native Status/Project/Agent above Machine with Dark blue machines, and exercise Restart preserving activation
 and Restore defaults resetting both profiles to No. The Restore regression
 starts from native-only rows that omit Machine and requires its native context
 to reappear in the open client with multiple machines. Line summaries appear only

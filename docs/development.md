@@ -79,8 +79,8 @@ still checking for pause/disable, avoiding a cleanup deadlock.
 
 The factory snapshot is defined by Settings in configuration.py. It follows the
 user-approved profiles captured on 2026-10-11: Grouped's fixed tree with View Agent
-and Show separator Off; Priority has Project/Machine on line 1 and Status/Agent on
-line 2, with its Machine color set to Dark blue. Other colors retain the default
+and Show separator Off; Priority has native Status/Project/Agent on line 1 and
+Machine on line 2, with its Machine color set to Dark blue. Other colors retain the default
 Yellow/Blue/Purple/Dark blue palette. Both modes
 are inactive. Factory reset uses the same defaults as a new installation;
 existing saves, including old active modes, are not reset by upgrades.
@@ -88,7 +88,7 @@ User operations serialize under a bounded operation lock; workers have their own
 lock so cleanup can finish before reactivation without competing config writes.
 Existing saved choices, including Show separator On,
 are preserved. Settings without a `mode` field load as Grouped. Priority uses two
-native rows per agent: project and machine above, native status and agent below.
+native rows per agent: native status, project and agent above, machine below.
 Its factory view hides Tab and gaps; identities remain scoped by machine.
 Settings has Grouped and Priority tabs, each with Active, View and four colors.
 Left/right or Tab changes the inspected profile without activating it. Active

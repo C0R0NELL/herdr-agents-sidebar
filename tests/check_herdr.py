@@ -103,8 +103,8 @@ def check_activation():
             assert not any("Line 1  [" in line or "Line 2  [" in line for line in lines), "Line settings appeared before opening Edit lines"
             os.write(terminal.master, b"\x1bOB\r")
             lines = terminal.wait(lambda lines: any("Priority view" in line for line in lines))
-            assert any("Line 1  [Project | Machine]" in line for line in lines)
-            assert any("Line 2  [Status | Agent]" in line for line in lines)
+            assert any("Line 1  [Status | Project | Agent]" in line for line in lines)
+            assert any("Line 2  [Machine]" in line for line in lines)
             save_row = next(y for y, line in enumerate(lines) if "Save view" in line)
             hint_row = next(y for y, line in enumerate(lines) if "Enter cycles" in line)
             assert hint_row - save_row >= 3, "Save view is crowded against the instructions"
@@ -116,17 +116,23 @@ def check_activation():
             os.write(terminal.master, b"\x1bOA\r")
             wait(lambda: store.load().enabled and store.load().mode == "priority")
             os.write(terminal.master, b"\x1b")
-            lines = terminal.wait(lambda lines: not popup_open(lines)
-                                  and sum("agente" in line[:36] for line in lines) == 3
-                                  and sum("projeto" in line[:36] and "Local" in line[:36] for line in lines) == 3)
+            def factory_rendered(lines):
+                entries = [(y, text) for y, text in sidebar_lines(lines, 36) if "agente" in text]
+                return (not popup_open(lines) and len(entries) == 3
+                        and all("◐" in text and "projeto" in text and "Local" in lines[y+1][:36]
+                                for y, text in entries))
+            lines = terminal.wait(factory_rendered)
             entries = [(y, text) for y, text in sidebar_lines(lines, 36) if "agente" in text]
             for y, text in entries:
-                assert "projeto" in lines[y-1][:36] and "Local" not in text
+                assert "projeto" in text and "Local" not in text
                 assert "tab01" not in text
                 x = text.index("◐")
+                assert x < text.index("projeto") < text.index("agente")
                 assert terminal.screen.buffer[y][x].fg == "f9e2af"
+                assert terminal.screen.buffer[y][text.index("projeto")].fg == "89b4fa"
                 assert terminal.screen.buffer[y][text.index("agente")].fg == "bd93f9"
-                assert terminal.screen.buffer[y-1][lines[y-1].index("Local")].fg == "6272a4"
+                assert lines[y+1][:35].strip() == "Local"
+                assert terminal.screen.buffer[y+1][lines[y+1].index("Local")].fg == "6272a4"
             selected = store.load()
             h.command("local", "plugin", "action", "invoke", "restart", "--plugin", PLUGIN_ID)
             wait(lambda: not worker_stopped(store.state) and all(t.get("has_agent") for t in tokens(h, "local")))
